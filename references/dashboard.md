@@ -639,8 +639,13 @@ shown in activity.
 
 Codex uses workspace-write sandboxing and automatic approval review. Claude uses
 its native auto permission mode, without bypass flags. Both retain
-the skill's separate sandbox requirement for executing PR code, and passes the
-selected lead model/effort. It explicitly reads the current skill checkout.
+the skill's separate sandbox requirement for executing PR code, and pass the
+selected lead model/effort. They explicitly read the current skill checkout.
+When a local `my-feedback-voice` skill is available at the configured path or
+one of the standard personal skill paths, the worker injects its contents into
+the provider prompt and records only its path and SHA-256 in job metadata. The
+style is limited to copyable comments, summaries and replies; it cannot change
+review scope, safety rules or the prohibition on publishing to GitHub.
 Reviewers report checkpoint counts through `set-task`; stage weights are a UI
 estimate, not an ETA or coverage guarantee. Skipped validation is shown explicitly.
 A successful finish requires settled tracker tasks and an existing `review-html`

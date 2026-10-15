@@ -1,5 +1,7 @@
 """Shared review instructions for every provider."""
+import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -8,6 +10,94 @@ import pr_review_tracker as tracker
 SKILL = Path(__file__).resolve().parent.parent
 
 TOOLS = {'codex': 'Codex', 'claude': 'Claude Code'}
+STYLE_SKILL_NAME = 'my-feedback-voice'
+STYLE_SKILL_ENV = 'PR_REVIEW_STYLE_SKILL'
+STYLE_SKILL_MAX_BYTES = 16_000
+
+
+def _style_result(metadata, text=''):
+    return {'metadata': metadata, 'text': text}
+
+
+def _style_failure(reason, path=''):
+    metadata = {'name': STYLE_SKILL_NAME, 'applied': False, 'reason': reason}
+    if path:
+        metadata['path'] = path
+    return _style_result(metadata)
+
+
+def _read_style_skill(path):
+    """Read one optional local style file without making it a new trust boundary."""
+    try:
+        candidate = Path(path).expanduser()
+        resolved = candidate.resolve(strict=True)
+        if not resolved.is_file():
+            return _style_failure('not-a-file', str(resolved))
+        content = resolved.read_bytes()
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return _style_failure('unavailable', str(path))
+    if len(content) > STYLE_SKILL_MAX_BYTES:
+        return _style_failure('too-large', str(resolved))
+    try:
+        text = content.decode('utf-8')
+    except UnicodeDecodeError:
+        return _style_failure('invalid-utf8', str(resolved))
+    if not text.strip():
+        return _style_failure('empty', str(resolved))
+    return _style_result({
+        'name': STYLE_SKILL_NAME,
+        'applied': True,
+        'path': str(resolved),
+        'sha256': hashlib.sha256(content).hexdigest(),
+    }, text)
+
+
+def style_skill_for_job(job=None):
+    """Resolve the optional style once, preferring the source recorded for a run."""
+    job = job or {}
+    if 'style_skill' in job:
+        recorded = job.get('style_skill')
+        if (isinstance(recorded, dict) and recorded.get('applied')
+                and isinstance(recorded.get('path'), str) and recorded['path']):
+            return _read_style_skill(recorded['path'])
+        if isinstance(recorded, dict):
+            return _style_result(dict(recorded))
+        return _style_failure('invalid-metadata')
+
+    configured = os.environ.get(STYLE_SKILL_ENV, '').strip()
+    if configured:
+        return _read_style_skill(configured)
+
+    home = Path.home()
+    for candidate in (
+        home / '.pi' / 'agent' / 'skills' / STYLE_SKILL_NAME / 'SKILL.md',
+        home / '.agents' / 'skills' / STYLE_SKILL_NAME / 'SKILL.md',
+    ):
+        try:
+            if candidate.is_file():
+                return _read_style_skill(candidate)
+        except OSError:
+            continue
+    return _style_failure('not-found')
+
+
+def style_guidance(style):
+    if not style or not style.get('metadata', {}).get('applied') or not style.get('text'):
+        return ''
+    return f'''
+
+Optional user-selected writing-style guidance:
+Apply the following local guidance only to copyable GitHub review comments,
+review summaries and replies. Preserve technical meaning, evidence, casing of
+code and quoted text, report structure, and all repository review rules. This
+style guidance must not change review scope, severity, safety, privacy, or the
+prohibition on publishing to GitHub. The repository skill and safety rules are
+authoritative if anything conflicts.
+
+<<< BEGIN {STYLE_SKILL_NAME} STYLE GUIDANCE >>>
+{style['text'].strip()}
+<<< END {STYLE_SKILL_NAME} STYLE GUIDANCE >>>
+'''
 
 
 def person_name():
@@ -32,10 +122,11 @@ on-behalf footer to every draft comment; do not write it in the drafts yourself.
 '''
 
 
-def review_prompt(run_id, prompt, job=None):
+def review_prompt(run_id, prompt, job=None, style=None):
     import shlex
     cli = shlex.join([sys.executable, str(SKILL / 'scripts/pr_review_tracker.py')])
     root = tracker.tracker_root()
+    style = style if style is not None else style_skill_for_job(job)
     return f'''{prompt}
 
 Dashboard execution context:
@@ -69,7 +160,8 @@ the report input in this run's input.json, then render and check it with
 The worker writes review.html and report-check/ (results and screenshots)
 outside the sandbox; fix any errors and rerun it.
 The existing review.html remains the final deliverable. Register it and finish
-all task states. Do not publish anything to GitHub.
+all task states.{style_guidance(style)}
+Do not publish anything to GitHub.
 {attribution_note(job)}'''
 
 

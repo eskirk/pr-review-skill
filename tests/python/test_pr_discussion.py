@@ -1,7 +1,11 @@
 """PR discussion digest and its capture before an in-app review, without GitHub calls."""
 import json
+import os
+from pathlib import Path
 import stat
+import tempfile
 from types import SimpleNamespace as NS
+from unittest.mock import patch
 
 import dashboard_reviews as c
 import pr_discussion as discussion
@@ -98,6 +102,33 @@ class WorkerPrefetch(Isolated):
         self.assertEqual(order, ['review'])
         self.assertIn('Could not save the PR discussion (ValueError)', events)
         self.assertNotIn('secret gh output', events)
+
+    def test_style_skill_is_recorded_and_sent_to_the_provider(self):
+        import review_context
+        run = self.seed()
+        requests = []
+        with tempfile.TemporaryDirectory() as directory:
+            skill = Path(directory) / 'SKILL.md'
+            skill.write_text('keep draft comments lowercase', encoding='utf-8')
+
+            class Client:
+                def run(self, request, callbacks):
+                    requests.append(request)
+                    return {'completed': False}
+                def close(self):
+                    pass
+
+            with patch.dict(os.environ, {review_context.STYLE_SKILL_ENV: str(skill)}):
+                c.ReviewWorker(run, c.read_job(run), lambda: Client(),
+                               discussion=lambda run_id: ('x', '0 threads')).run()
+
+        job = t.read_json(c.path(run))
+        self.assertTrue(job['style_skill']['applied'])
+        self.assertEqual(job['style_skill']['path'], str(skill.resolve()))
+        self.assertNotIn('keep draft comments lowercase', json.dumps(job))
+        self.assertEqual(len(requests), 1)
+        self.assertIn('BEGIN my-feedback-voice STYLE GUIDANCE', requests[0].prompt)
+        self.assertIn('keep draft comments lowercase', requests[0].prompt)
 
 
 if __name__ == '__main__':

@@ -29,6 +29,64 @@ class DashboardLaunch(unittest.TestCase):
         with patch.object(review_context, 'person_name', return_value=''):
             self.assertNotIn('comment_attribution', review_context.review_prompt('RUN', 'Review it', {'provider': 'codex', 'model': 'x'}))
 
+    def test_configured_style_skill_is_injected_as_bounded_comment_guidance(self):
+        import review_context
+        with tempfile.TemporaryDirectory() as directory:
+            skill = Path(directory) / 'SKILL.md'
+            text = '# local voice\n- keep comments lowercase\n- never use em dashes'
+            skill.write_text(text, encoding='utf-8')
+            with patch.dict(os.environ, {review_context.STYLE_SKILL_ENV: str(skill)}):
+                resolved = review_context.style_skill_for_job()
+                prompt = review_context.review_prompt('RUN', 'Review it',
+                    {'style_skill': resolved['metadata']}, style=resolved)
+            self.assertTrue(resolved['metadata']['applied'])
+            self.assertEqual(resolved['metadata']['name'], 'my-feedback-voice')
+            self.assertEqual(resolved['metadata']['path'], str(skill.resolve()))
+            self.assertNotIn(text, json.dumps(resolved['metadata']))
+            self.assertIn('BEGIN my-feedback-voice STYLE GUIDANCE', prompt)
+            self.assertIn(text, prompt)
+            self.assertIn('only to copyable GitHub review comments', prompt)
+            self.assertIn('must not change review scope, severity, safety, privacy', prompt)
+
+    def test_style_skill_falls_back_to_pi_or_agents_skill_paths(self):
+        import review_context
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            skill = home / '.agents' / 'skills' / 'my-feedback-voice' / 'SKILL.md'
+            skill.parent.mkdir(parents=True)
+            skill.write_text('lowercase feedback', encoding='utf-8')
+            with patch.dict(os.environ, {}, clear=True), patch.object(Path, 'home', return_value=home):
+                resolved = review_context.style_skill_for_job()
+            self.assertTrue(resolved['metadata']['applied'])
+            self.assertEqual(resolved['metadata']['path'], str(skill.resolve()))
+            self.assertIn('lowercase feedback', resolved['text'])
+
+    def test_missing_style_skill_does_not_block_review_or_trigger_fallback(self):
+        import review_context
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / 'missing.md'
+            with patch.dict(os.environ, {review_context.STYLE_SKILL_ENV: str(missing)}):
+                resolved = review_context.style_skill_for_job()
+                prompt = review_context.review_prompt('RUN', 'Review it',
+                    {'style_skill': resolved['metadata']}, style=resolved)
+            self.assertFalse(resolved['metadata']['applied'])
+            self.assertEqual(resolved['metadata']['reason'], 'unavailable')
+            self.assertNotIn('BEGIN my-feedback-voice STYLE GUIDANCE', prompt)
+
+    def test_style_skill_is_size_and_encoding_bounded(self):
+        import review_context
+        with tempfile.TemporaryDirectory() as directory:
+            oversized = Path(directory) / 'oversized.md'
+            oversized.write_bytes(b'x' * (review_context.STYLE_SKILL_MAX_BYTES + 1))
+            with patch.dict(os.environ, {review_context.STYLE_SKILL_ENV: str(oversized)}):
+                resolved = review_context.style_skill_for_job()
+            self.assertEqual(resolved['metadata']['reason'], 'too-large')
+            invalid = Path(directory) / 'invalid.md'
+            invalid.write_bytes(b'\xff')
+            with patch.dict(os.environ, {review_context.STYLE_SKILL_ENV: str(invalid)}):
+                resolved = review_context.style_skill_for_job()
+            self.assertEqual(resolved['metadata']['reason'], 'invalid-utf8')
+
     def test_both_providers_share_review_worker_and_keep_feature_selection(self):
         from test_dashboard import Isolated, URL
         import ai_settings

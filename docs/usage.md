@@ -165,7 +165,10 @@ averages; weekly counts remain distinct PRs for the week.
 
 - Set `PR_REVIEW_LOCAL_DEV_ROOT` to the directory containing your existing clones.
   It defaults to `~/Development` and is used as a checkout discovery hint.
-- Optionally configure a writing-style skill in your agent for personalized comments.
+- Optionally configure a writing-style skill for personalized comments. Dashboard AI
+  reviews inject `my-feedback-voice` from `~/.pi/agent/skills/` or `~/.agents/skills/`,
+  or from the path in `PR_REVIEW_STYLE_SKILL`, when available. It affects copyable
+  comments, summaries and replies only.
 - Reporting's Europe/Berlin timezone is currently fixed in the backend and UI;
   it is not a dashboard setting.
 - For automatic startup on macOS, generate a launchd plist for your installation

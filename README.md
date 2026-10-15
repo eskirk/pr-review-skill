@@ -221,7 +221,11 @@ https://github.com/OWNER/REPOSITORY/pull/123.
 You can also use **Copy review prompt** from a PR's actions menu. Automatic skill
 discovery depends on your agent's search paths; cloning here alone does not
 configure every CLI. The renderer and neutral comment-writing guidance are
-bundled. A personal writing-style skill is optional.
+bundled. Dashboard AI reviews also inject `my-feedback-voice` when it is found
+at `~/.pi/agent/skills/my-feedback-voice/SKILL.md`,
+`~/.agents/skills/my-feedback-voice/SKILL.md`, or the path set by
+`PR_REVIEW_STYLE_SKILL`. It applies only to copyable comments, summaries and
+replies; the repository's review and safety rules remain authoritative.
 
 ## Configuration and data
 
@@ -231,14 +235,17 @@ bundled. A personal writing-style skill is optional.
 | `PR_REVIEW_TRACKER_HOME` | Local state and report directory; defaults to `~/.local/share/pr-review-tracker/`. Use separate homes for different GitHub accounts. |
 | `PR_REVIEW_PYTHON` | Python interpreter for background workers. |
 | `PR_REVIEW_CLAUDE` / `PR_REVIEW_NODE` | Explicit Claude Code and Node.js executable paths when needed. |
+| `PR_REVIEW_STYLE_SKILL` | Optional path to a local writing-style `SKILL.md`; defaults to the two `my-feedback-voice` locations described above. |
 
 Set environment variables before starting the server. A background service may
 have a different `PATH` and environment from your terminal.
 
 The server listens on loopback. GitHub sync reads with your `gh` credentials;
 AI features send relevant PR descriptions, code/diffs and questions to the
-selected provider. Enable them only for repositories you can share with it.
-Private notes and Ask AI conversations stay local by default. An explicitly
+selected provider. When a writing-style skill is applied, its bounded contents
+are sent with the review prompt as well. Enable them only for repositories and
+local style guidance you can share with that provider. Private notes and Ask AI
+conversations stay local by default. An explicitly
 selected note or conversation can be included as quoted context in a guided AI
 review; selected content is sent to the configured provider and retained in that
 review's local run history.
