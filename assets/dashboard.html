@@ -154,6 +154,13 @@
   <div class="dialog-heading"><h2 id="filters-heading">Inbox filters</h2><button class="button subtle" data-close-dialog>Done</button></div>
   <section class="filters" aria-label="Filter pull requests">
 <label class="search-field"><span class="sr-only">Search pull requests</span><input id="search" type="search" placeholder="Search title, repository, author, or #number" autocomplete="off"></label>
+<section class="filter-presets" aria-labelledby="filter-presets-heading">
+<div class="filter-panel-heading"><strong id="filter-presets-heading">Saved presets</strong></div>
+<p class="muted">Your last-used filters are restored on load. A default is applied only when you press Reset to default.</p>
+<div class="filter-preset-controls"><label>Preset<select id="filter-preset"><option value="">No preset selected</option></select></label><div class="filter-preset-actions"><button type="button" class="text-button" id="filter-preset-apply" disabled>Apply</button><button type="button" class="text-button" id="filter-preset-default" disabled>Set as default</button><button type="button" class="text-button" id="filter-preset-rename" disabled>Rename</button><button type="button" class="text-button" id="filter-preset-delete" disabled>Delete</button></div></div>
+<div class="filter-preset-save"><label>Save current filters as<input id="filter-preset-name" type="text" maxlength="80" placeholder="e.g. Ready for review"></label><button type="button" class="button" id="filter-preset-save">Save preset</button></div>
+<p id="filter-preset-status" class="muted" aria-live="polite"></p>
+</section>
 <details id="repository-picker" class="filter-picker">
 <summary id="repository-summary">All repositories</summary>
 <section class="filter-panel" aria-label="Choose repositories">
@@ -184,7 +191,7 @@
 <div id="status-options" class="filter-options"></div>
 <p id="status-selection" class="muted" aria-live="polite"></p>
 </section></details>
-<div class="filter-bottom"><label>Drafts<select id="drafts"><option value="all">Include drafts</option><option value="ready">Ready for review</option><option value="only">Drafts only</option></select></label><label>Review load<select id="triage-filter"><option value="all">Any review load</option><option value="quick">Low</option><option value="moderate">Medium</option><option value="involved">High</option><option value="uncertain">Unsure / unavailable</option></select></label><label class="sort-label">Sort<select id="sort"><option value="updated">Recent activity</option><option value="oldest">Waiting longest</option><option value="effort">Review load, lightest first</option></select></label><button class="text-button" id="clear-filters">Clear filters</button></div>
+<div class="filter-bottom"><label>Drafts<select id="drafts"><option value="all">Include drafts</option><option value="ready">Ready for review</option><option value="only">Drafts only</option></select></label><label>Review load<select id="triage-filter"><option value="all">Any review load</option><option value="quick">Low</option><option value="moderate">Medium</option><option value="involved">High</option><option value="uncertain">Unsure / unavailable</option></select></label><label class="sort-label">Sort<select id="sort"><option value="updated">Recent activity</option><option value="oldest">Waiting longest</option><option value="effort">Review load, lightest first</option></select></label><button class="text-button" id="clear-filters" type="button">Reset to default</button></div>
 </section>
 </dialog>
 <dialog id="queue-add-dialog" class="workspace-dialog" aria-labelledby="queue-add-heading">
@@ -192,7 +199,7 @@
   <form id="queue-add" class="queue-add"><label>Save a PR link<input name="url" type="url" placeholder="https://github.com/owner/repo/pull/123" required></label><button class="button primary" type="submit">Add to Up next</button></form>
 </dialog>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-<dialog id="guidance-dialog" aria-labelledby="guidance-heading"><form id="guidance-form"><h2 id="guidance-heading">Run AI review with guidance</h2><p id="guidance-title" class="muted"></p><label>What should the reviewer know or focus on?<textarea id="guidance-text" rows="5" maxlength="2000" placeholder="Only iOS code changed; validate on iOS only.&#10;Docs-only change; skip builds and tests."></textarea></label><p class="muted">Steers scope and validation for this run only. The reviewer still reports serious issues it notices.</p><div class="action-bar"><button class="button primary" type="submit">Start review</button><button class="button" type="button" data-close-dialog>Cancel</button></div></form></dialog>
+<dialog id="guidance-dialog" aria-labelledby="guidance-heading"><form id="guidance-form"><h2 id="guidance-heading">Run AI review with guidance</h2><p id="guidance-title" class="muted"></p><label>What should the reviewer know or focus on?<textarea id="guidance-text" rows="5" maxlength="2000" placeholder="Only iOS code changed; validate on iOS only.&#10;Docs-only change; skip builds and tests."></textarea></label><section class="review-context-picker" aria-labelledby="guidance-context-heading"><h3 id="guidance-context-heading">Optional private context</h3><p class="muted">Choose saved notes or Ask AI conversations to quote in this review. Selected content is sent to the AI provider; it is not treated as instructions.</p><div id="guidance-sources" class="review-context-sources"><p class="muted">Loading saved notes and conversations…</p></div><p id="guidance-context-count" class="muted" aria-live="polite">No private context selected.</p></section><p class="muted">Guidance steers scope and validation for this run only. The reviewer still reports serious issues it notices.</p><div class="action-bar"><button class="button primary" type="submit">Start review</button><button class="button" type="button" data-close-dialog>Cancel</button></div></form></dialog>
 <dialog id="prompt-dialog" aria-labelledby="prompt-heading" aria-describedby="prompt-help">
 <h2 id="prompt-heading">Copy prompt</h2>
 <p id="prompt-help" class="muted">Clipboard access is unavailable. Copy the selected text with ⌘C or Ctrl+C, then paste it into your preferred agent session.</p>

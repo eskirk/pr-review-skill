@@ -720,12 +720,50 @@ import { installChatResize } from "./chat-resize.mjs";
     target?.scrollIntoView({ block: "center", behavior: "instant" });
     target?.querySelector("summary")?.focus({ preventScroll: true });
   }
+  function sourceRevision(head) {
+    if (!head) return "Revision not recorded";
+    return head === data.head ? "Current commit" : `Older commit ${head.slice(0, 12)}`;
+  }
+  function noteRevision(note) {
+    if (typeof note.head === "string" && note.head) return note.head;
+    return contextsOf(note).find((context) => typeof context.head === "string" && context.head)?.head || "";
+  }
+  function noteId() {
+    return crypto.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+  function renderGuidanceSources() {
+    const container = $("guidance-sources");
+    if (!container || !data) return;
+    const notes = saved.notes.map((note) => {
+      const head = noteRevision(note);
+      const preview = String(note.text || "").replace(/\s+/g, " ").trim();
+      return `<label class="review-context-option"><input type="checkbox" data-guidance-note="${esc(note.id || "")}"><span><strong>Private note</strong><small>${esc(sourceRevision(head))}${contextsOf(note).length ? ` · ${contextsOf(note).length} code ${contextsOf(note).length === 1 ? "selection" : "selections"}` : ""}</small><span>${esc(preview.slice(0, 220) + (preview.length > 220 ? "…" : ""))}</span></span></label>`;
+    });
+    const conversations = saved.threads.map((thread) => {
+      const messages = thread.messages.filter((message) => ["user", "assistant"].includes(message.role));
+      const first = messages.find((message) => message.role === "user");
+      const preview = String(first?.text || "Conversation").replace(/\s+/g, " ").trim();
+      const answers = messages.filter((message) => message.role === "assistant").length;
+      return `<label class="review-context-option"><input type="checkbox" data-guidance-conversation="${esc(thread.id)}"><span><strong>Ask AI conversation</strong><small>${esc(sourceRevision(thread.head))} · ${messages.length} messages · ${answers} ${answers === 1 ? "answer" : "answers"}</small><span>${esc(preview.slice(0, 220) + (preview.length > 220 ? "…" : ""))}</span></span></label>`;
+    });
+    container.innerHTML = notes.concat(conversations).join("") || '<p class="muted">No private notes or Ask AI conversations are saved for this PR.</p>';
+    $("guidance-context-count").textContent = "No private context selected.";
+  }
+  function selectedGuidanceContext() {
+    const notes = [...document.querySelectorAll("#guidance-sources [data-guidance-note]:checked")].map((input) => input.dataset.guidanceNote);
+    const conversations = [...document.querySelectorAll("#guidance-sources [data-guidance-conversation]:checked")].map((input) => input.dataset.guidanceConversation);
+    return notes.length || conversations.length ? { notes, conversations } : null;
+  }
+  function updateGuidanceSelectionCount() {
+    const count = document.querySelectorAll("#guidance-sources input:checked").length;
+    $("guidance-context-count").textContent = count ? `${count} private source${count === 1 ? "" : "s"} selected.` : "No private context selected.";
+  }
   function renderNotes() {
     $("saved-notes").innerHTML = saved.notes.length
       ? saved.notes
           .map((note, index) => {
             const contexts = contextsOf(note);
-            return `<article class="saved-note"><small>${contexts.length ? esc(contexts.length + " code " + (contexts.length === 1 ? "selection" : "selections")) : "Pull request note"} · ${esc(data.head.slice(0, 12))}</small><p>${esc(note.text)}</p><div class="note-actions">${contexts.map((context, n) => `<button class="text-button" data-note-jump="${index}" data-context-index="${n}">${esc(basename(context.path))} · ${esc(context.label)}</button>`).join("")}<button class="text-button" data-note-edit="${index}">Edit</button><button class="text-button" data-note-delete="${index}">Delete</button></div></article>`;
+            return `<article class="saved-note"><small>${contexts.length ? esc(contexts.length + " code " + (contexts.length === 1 ? "selection" : "selections")) : "Pull request note"} · ${esc(sourceRevision(noteRevision(note)))}</small><p>${esc(note.text)}</p><div class="note-actions">${contexts.map((context, n) => `<button class="text-button" data-note-jump="${index}" data-context-index="${n}">${esc(basename(context.path))} · ${esc(context.label)}</button>`).join("")}<button class="text-button" data-note-edit="${index}">Edit</button><button class="text-button" data-note-delete="${index}">Delete</button></div></article>`;
           })
           .join("")
       : '<p class="muted">No notes yet. Save an answer or write your own.</p>';
@@ -825,6 +863,10 @@ import { installChatResize } from "./chat-resize.mjs";
         Array.isArray(message.contexts) ? message.contexts : contextsOf(t),
       );
       saved.notes.push({
+        id: noteId(),
+        created_at: new Date().toISOString(),
+        base: data.base,
+        head: data.head,
         text: message.text,
         contexts,
         context: contexts.at(-1) || null,
@@ -912,6 +954,7 @@ import { installChatResize } from "./chat-resize.mjs";
     }
     if (button.id === "generate-review-guided") {
       $("guidance-text").value = "";
+      renderGuidanceSources();
       $("guidance-dialog").showModal();
       $("guidance-text").focus();
     }
@@ -1039,6 +1082,7 @@ import { installChatResize } from "./chat-resize.mjs";
   });
   async function startReview(body) {
     try {
+      await saver.flush();
       await api.request("/regenerate-review", body);
       notify(
         body.mode === "update"
@@ -1063,10 +1107,13 @@ import { installChatResize } from "./chat-resize.mjs";
     event.preventDefault();
     const submit = $("guidance-form").querySelector("[type=submit]");
     submit.disabled = true;
-    if (await startReview({ guidance: $("guidance-text").value }))
-      $("guidance-dialog").close();
+    const context = selectedGuidanceContext();
+    const body = { guidance: $("guidance-text").value };
+    if (context) body.workspace_context = context;
+    if (await startReview(body)) $("guidance-dialog").close();
     submit.disabled = false;
   });
+  $("guidance-sources").addEventListener("change", updateGuidanceSelectionCount);
   $("files-toggle").addEventListener("click", () => {
     const overlay =
       innerWidth <= 750 || (innerWidth <= 1150 && !$("conversation").hidden);
@@ -1192,6 +1239,10 @@ import { installChatResize } from "./chat-resize.mjs";
       editingNote = null;
     } else
       saved.notes.push({
+        id: noteId(),
+        created_at: new Date().toISOString(),
+        base: data.base,
+        head: data.head,
         text,
         context: selection ? structuredClone(selection) : null,
       });

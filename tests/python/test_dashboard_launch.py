@@ -47,6 +47,37 @@ class DashboardLaunch(unittest.TestCase):
                 self.assertNotIn('launch-exit',prompt)
         finally:fixture.tearDown()
 
+    def test_selected_workspace_context_is_in_prompt_and_metadata(self):
+        from test_dashboard import Isolated, URL
+        import workspace_chat as chat
+        import workspace_store as store
+        import pr_review_tracker as tracker
+        import dashboard_runtime as runtime
+        fixture=Isolated();fixture.setUp()
+        try:
+            note_id='note-context-1'
+            tracker.atomic_write(store.directory(URL)/'state.json',{
+                'version':0,'viewed':{},'collapsed':[],
+                'notes':[{'id':note_id,'text':'Check timeout cleanup','head':'b'*40,'base':'a'*40}],
+                'attachments':{}})
+            thread_id='11111111-1111-1111-1111-111111111111'
+            chat.save(URL,{'id':thread_id,'base':'a'*40,'head':'b'*40,'status':'completed','messages':[
+                {'role':'user','text':'Focus on the timer.'},
+                {'role':'assistant','text':'The timer needs cleanup.','reads':[{'kind':'read_file','path':'secret'}]}]})
+            with patch.object(runtime.reviews,'start') as launch:
+                run_id=runtime.start_launch(URL,'review',retry=True,workspace_context={
+                    'notes':[note_id],'conversations':[thread_id]})['run_id']
+            prompt=launch.call_args.args[1]
+            self.assertIn('Check timeout cleanup',prompt)
+            self.assertIn('Focus on the timer.',prompt)
+            self.assertIn('The timer needs cleanup.',prompt)
+            self.assertNotIn('read_file',prompt)
+            meta=json.loads(runtime.launch_path(run_id).read_text())
+            self.assertEqual(meta['workspace_context']['notes'],[note_id])
+            self.assertEqual(meta['workspace_context']['conversations'],[thread_id])
+            self.assertNotIn('Check timeout cleanup',json.dumps(meta))
+        finally:fixture.tearDown()
+
     def test_guidance_steers_prompt_and_is_recorded_with_the_run(self):
         from test_dashboard import Isolated, URL
         import dashboard_runtime as runtime
@@ -63,6 +94,7 @@ class DashboardLaunch(unittest.TestCase):
                 runtime.start_launch(URL,'review',retry=True,guidance='   ')
             run_id,prompt,_=launch.call_args.args
             self.assertNotIn('Reviewer guidance',prompt)
+            self.assertNotIn('Selected private review context',prompt)
             self.assertNotIn('guidance',json.loads(runtime.launch_path(run_id).read_text()))
             with self.assertRaises(dashboard.DashboardError):
                 runtime.start_launch(URL,'review',retry=True,guidance='x'*(runtime.GUIDANCE_LIMIT+1))

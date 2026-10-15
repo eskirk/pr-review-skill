@@ -28,6 +28,33 @@ for(const [prefix,legacy] of [['repositories','repository'],['statuses','status'
  filters[prefix+'Excluded']=selectedValues(filters[prefix+'Excluded']);delete filters[legacy];
 }
 if(!labels[filters.view])filters.view='requested';
+const presetKeys=['search','repositoriesOnly','repositoriesExcluded','authorsOnly','authorsExcluded','statusesOnly','statusesExcluded','drafts','triageEffort','sort'];
+const filterPresetStorageKey='pr-inbox-filter-presets';
+function normalizePresetFilters(value){
+ const source=value&&typeof value==='object'?value:{};
+ const result={search:typeof source.search==='string'?source.search:''};
+ for(const key of ['repositoriesOnly','repositoriesExcluded','authorsOnly','authorsExcluded','statusesOnly','statusesExcluded'])result[key]=selectedValues(source[key]);
+ result.drafts=['all','ready','only'].includes(source.drafts)?source.drafts:'all';
+ result.triageEffort=['all','quick','moderate','involved','uncertain'].includes(source.triageEffort)?source.triageEffort:'all';
+ result.sort=['updated','oldest','effort'].includes(source.sort)?source.sort:'updated';
+ return result;
+}
+function readFilterPresets(){
+ try{
+  const value=JSON.parse(localStorage.getItem(filterPresetStorageKey)||'{}');
+  if(!value||typeof value!=='object')return {version:1,defaultId:null,presets:[]};
+  const seen=new Set(),presets=(Array.isArray(value.presets)?value.presets:[]).filter(item=>{
+   if(!item||typeof item!=='object'||typeof item.id!=='string'||!item.id||seen.has(item.id)||typeof item.name!=='string'||!item.name.trim())return false;
+   seen.add(item.id);return true;
+  }).map(item=>({id:item.id,name:item.name.trim().slice(0,80),filters:normalizePresetFilters(item.filters)}));
+  return {version:1,defaultId:presets.some(item=>item.id===value.defaultId)?value.defaultId:null,presets};
+ }catch{return {version:1,defaultId:null,presets:[]};}
+}
+let filterPresets=readFilterPresets(),selectedPresetId='';
+function saveFilterPresets(){try{localStorage.setItem(filterPresetStorageKey,JSON.stringify(filterPresets));}catch{}}
+function presetSnapshot(value=filters){const result={};for(const key of presetKeys)result[key]=Array.isArray(value[key])?[...value[key]]:value[key];return result;}
+function presetById(id){return filterPresets.presets.find(item=>item.id===id)||null;}
+function randomPresetId(){return crypto.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2);}
 let reportingData=null, reportingActive=false, state=null, listSignature='', settingsDirty=false, loading=false, toastTimer, undoAction=null, showAction=null;
 const busy = new Set();
 // Restore only after async PR data has rebuilt the overview's full height.
@@ -47,6 +74,47 @@ function restoreOverviewScroll(){
  }catch{}
 }
 function saveFilters(){try{localStorage.setItem('pr-inbox-filters',JSON.stringify(filters));}catch{}}
+function renderFilterPresets(){
+ const select=$('filter-preset');if(!select)return;
+ const current=presetById(selectedPresetId)?selectedPresetId:'';
+ select.innerHTML='<option value="">No preset selected</option>'+filterPresets.presets.map(item=>`<option value="${esc(item.id)}">${esc(item.name)}${item.id===filterPresets.defaultId?' · default':''}</option>`).join('');
+ selectedPresetId=current;select.value=current;
+ const enabled=!!current;
+ for(const id of ['filter-preset-apply','filter-preset-default','filter-preset-rename','filter-preset-delete'])$(id).disabled=!enabled;
+ $('filter-preset-default').textContent=enabled&&current===filterPresets.defaultId?'Unset default':'Set as default';
+ const selected=presetById(current);if(selected&&document.activeElement!==$('filter-preset-name'))$('filter-preset-name').value=selected.name;
+}
+function applyInboxFilters(value){
+ const view=filters.view,reportOnly=[...filters.reportRepositoriesOnly],reportExcluded=[...filters.reportRepositoriesExcluded];
+ filters={...defaults,...normalizePresetFilters(value),view,reportRepositoriesOnly:reportOnly,reportRepositoriesExcluded:reportExcluded};
+ for(const id of Object.keys(pickerConfig))$(id+'-search').value='';
+ syncFilterControls();saveFilters();renderList();
+}
+function resetToDefault(){
+ const preset=presetById(filterPresets.defaultId);
+ selectedPresetId=preset?.id||'';
+ applyInboxFilters(preset?.filters||defaults);
+ notify(preset?`Reset to “${preset.name}”.`:'Reset to built-in defaults.');
+}
+function saveCurrentPreset(){
+ const input=$('filter-preset-name'),name=input.value.trim();
+ if(!name){$('filter-preset-status').textContent='Enter a name for this preset.';input.focus();return;}
+ if(filterPresets.presets.some(item=>item.name.toLowerCase()===name.toLowerCase())){$('filter-preset-status').textContent='A preset with that name already exists.';input.focus();return;}
+ const preset={id:randomPresetId(),name:name.slice(0,80),filters:presetSnapshot()};filterPresets.presets.push(preset);selectedPresetId=preset.id;saveFilterPresets();renderFilterPresets();$('filter-preset-status').textContent=`Saved “${preset.name}”.`;
+}
+function applySelectedPreset(){const preset=presetById(selectedPresetId);if(!preset)return;applyInboxFilters(preset.filters);notify(`Applied “${preset.name}”.`);}
+function toggleDefaultPreset(){const preset=presetById(selectedPresetId);if(!preset)return;filterPresets.defaultId=filterPresets.defaultId===preset.id?null:preset.id;saveFilterPresets();renderFilterPresets();$('filter-preset-status').textContent=filterPresets.defaultId===preset.id?`“${preset.name}” is now the default.`:'Default preset cleared.';}
+function renameSelectedPreset(){
+ const preset=presetById(selectedPresetId),input=$('filter-preset-name'),name=input.value.trim();
+ if(!preset)return;
+ if(!name){$('filter-preset-status').textContent='Enter a name for this preset.';input.focus();return;}
+ if(filterPresets.presets.some(item=>item.id!==preset.id&&item.name.toLowerCase()===name.toLowerCase())){$('filter-preset-status').textContent='A preset with that name already exists.';input.focus();return;}
+ preset.name=name.slice(0,80);saveFilterPresets();renderFilterPresets();$('filter-preset-status').textContent=`Renamed to “${preset.name}”.`;
+}
+function deleteSelectedPreset(){
+ const preset=presetById(selectedPresetId);if(!preset)return;
+ filterPresets.presets=filterPresets.presets.filter(item=>item.id!==preset.id);if(filterPresets.defaultId===preset.id)filterPresets.defaultId=null;selectedPresetId='';saveFilterPresets();renderFilterPresets();$('filter-preset-name').value='';$('filter-preset-status').textContent=`Deleted “${preset.name}”.`;
+}
 function when(stamp){if(!stamp)return 'Not yet checked';const date=new Date(stamp);return Number.isNaN(date.valueOf())?'Unknown date':date.toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});}
 function since(stamp){if(!stamp)return 'Unknown';const minutes=Math.max(0,Math.floor((Date.now()-new Date(stamp))/60000));if(!Number.isFinite(minutes))return 'Unknown';if(minutes<1)return 'just now';if(minutes<60)return minutes+'m ago';if(minutes<1440)return Math.floor(minutes/60)+'h ago';return Math.floor(minutes/1440)+'d ago';}
 function notify(text,undo,show){clearTimeout(toastTimer);undoAction=undo||null;showAction=show||null;$('toast').replaceChildren(document.createTextNode(text));for(const [id,label,enabled] of [['toast-show','Show',show],['undo','Undo',undo]])if(enabled){const button=document.createElement('button');button.textContent=label;button.id=id;$('toast').append(button);}$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,undo||show?10000:6000);}
@@ -192,7 +260,7 @@ function card(pr){
  <div class="pr-foot"><span title="Your participation on GitHub">GitHub: ${esc(pr.participation)}</span>${status}</div>
  ${triageCard(pr)}${artifactWarning(pr)}${updateHint(pr)}${reviewSummary(run)}
  ${run||history||Object.keys(arts).length?`<details class="run-details"><summary>AI run details & history</summary><div class="detail-content">
- ${run?`<section><p class="detail-heading">${esc(statusLabels[run.status]||run.status)} · ${esc(run.tool)}</p><p class="muted">Last recorded AI activity ${esc(since(run.updated_at))}. ${isActive&&run.transport!=='in-app'?'Status comes from the review tracker; it does not prove the terminal is still running.':''}</p>${run.message?`<p class="muted">${esc(run.message)}</p>`:''}${run.guidance?`<p class="muted run-guidance"><strong>Guidance:</strong> ${esc(run.guidance)}</p>`:''}<ul class="task-list">${run.tasks.filter(t=>t.status!=='skipped').map(t=>`<li title="${esc(t.message)}">${esc(t.name.replaceAll('-',' '))}: ${esc(t.status)}</li>`).join('')}</ul>${run.session_reference?`<div class="action-bar"><button class="button" data-copy="${esc(run.session_reference)}">Copy session reference</button>${safeUrl(run.session_reference)!=='#'?`<a class="button" href="${esc(safeUrl(run.session_reference))}" target="_blank" rel="noopener">Open session</a>`:''}</div>`:'<p class="muted">No session reference recorded.</p>'}
+ ${run?`<section><p class="detail-heading">${esc(statusLabels[run.status]||run.status)} · ${esc(run.tool)}</p><p class="muted">Last recorded AI activity ${esc(since(run.updated_at))}. ${isActive&&run.transport!=='in-app'?'Status comes from the review tracker; it does not prove the terminal is still running.':''}</p>${run.message?`<p class="muted">${esc(run.message)}</p>`:''}${run.guidance?`<p class="muted run-guidance"><strong>Guidance:</strong> ${esc(run.guidance)}</p>`:''}${run.workspace_context?.notes?.length||run.workspace_context?.conversations?.length?`<p class="muted"><strong>Private context:</strong> ${run.workspace_context.notes?.length||0} note${(run.workspace_context.notes?.length||0)===1?'':'s'} and ${run.workspace_context.conversations?.length||0} conversation${(run.workspace_context.conversations?.length||0)===1?'':'s'}${run.workspace_context.truncated?' · truncated to the context limit':''}</p>`:''}<ul class="task-list">${run.tasks.filter(t=>t.status!=='skipped').map(t=>`<li title="${esc(t.message)}">${esc(t.name.replaceAll('-',' '))}: ${esc(t.status)}</li>`).join('')}</ul>${run.session_reference?`<div class="action-bar"><button class="button" data-copy="${esc(run.session_reference)}">Copy session reference</button>${safeUrl(run.session_reference)!=='#'?`<a class="button" href="${esc(safeUrl(run.session_reference))}" target="_blank" rel="noopener">Open session</a>`:''}</div>`:'<p class="muted">No session reference recorded.</p>'}
  ${run.transport!=='in-app'&&(attention(run)||['starting','queued'].includes(run.status))?`<button class="button" data-action="/regenerate-review" data-url="${esc(pr.url)}" data-retry="true">Retry after closing the previous terminal</button>`:''}</section>`:''}
  ${Object.keys(arts).length?`<section><p class="detail-heading">Results currently shown</p>${Object.entries(arts).map(([name,a])=>`<p class="muted">${artifactLabel(name)}: ${esc(when(a.created_at))} · ${esc(a.tool)} · commit ${esc(a.head_sha?.slice(0,12)||'not recorded')}${a.status!=='completed'?' · partial result':''}</p>`).join('')}</section>`:''}${history}</div></details>`:''}</article>`;
 }
@@ -284,7 +352,7 @@ function renderList(force=false){if(!state)return;const prs=visiblePrs();const s
  const restoreFocus=rememberCardFocus($('pr-list'));
  const expanded=new Map([...$('pr-list').querySelectorAll('[data-pr]')].map(el=>[el.dataset.pr,[...el.querySelectorAll('details[open]')].map(d=>d.className)]));
  const focused=document.activeElement,focusUrl=focused?.dataset?.url,focusAction=focused?.dataset?.action;
- $('pr-list').innerHTML=(prs.length?prTable(prs):'')||`<div class="empty"><h3>${filters.search||filters.repositoriesOnly.length||filters.repositoriesExcluded.length||filters.authorsOnly.length||filters.authorsExcluded.length||filters.statusesOnly.length||filters.statusesExcluded.length||filters.drafts!=='all'||filters.triageEffort!=='all'?'No PRs match these filters':'Nothing here right now'}</h3><p class="muted">${filters.view==='hidden'?'Hidden PRs can be restored here.':'Try another view, clear your filters, or sync GitHub.'}</p><button class="text-button" data-clear>Clear filters</button></div>`;
+ $('pr-list').innerHTML=(prs.length?prTable(prs):'')||`<div class="empty"><h3>${filters.search||filters.repositoriesOnly.length||filters.repositoriesExcluded.length||filters.authorsOnly.length||filters.authorsExcluded.length||filters.statusesOnly.length||filters.statusesExcluded.length||filters.drafts!=='all'||filters.triageEffort!=='all'?'No PRs match these filters':'Nothing here right now'}</h3><p class="muted">${filters.view==='hidden'?'Hidden PRs can be restored here.':'Try another view, reset your filters, or sync GitHub.'}</p><button class="text-button" data-clear>Reset to default</button></div>`;
  $('pr-list').querySelectorAll('[data-pr]').forEach(el=>{for(const d of el.querySelectorAll('details'))if(expanded.get(el.dataset.pr)?.includes(d.className))d.open=true;});
  if(focusUrl&&focusAction&&$('pr-list').contains(focused)){const replacement=[...$('pr-list').querySelectorAll('[data-action]')].find(el=>el.dataset.url===focusUrl&&el.dataset.action===focusAction);replacement?.focus({preventScroll:true});}
  restoreFocus();
@@ -388,11 +456,11 @@ function renderState(){
 }
 let stateRequest=null;
 function loadState(){if(stateRequest)return stateRequest;stateRequest=(async()=>{loading=true;try{const response=await fetch('/api/state');if(!response.ok)throw new Error('Could not read the inbox.');state=await response.json();$('connection').hidden=true;renderState();refreshExpiredSnoozes();}catch(error){$('connection').hidden=false;$('connection').textContent='Connection interrupted. Showing the last loaded inbox; retrying automatically. '+error.message;}finally{loading=false;stateRequest=null;}})();return stateRequest;}
-function syncFilterControls(){ $('search').value=filters.search;renderPickers();$('drafts').value=filters.drafts;$('sort').value=filters.sort;$('triage-filter').value=filters.triageEffort;}
-function clearFilters(){for(const id of Object.keys(pickerConfig))$(id+'-search').value='';filters={...defaults,view:filters.view,reportRepositoriesOnly:filters.reportRepositoriesOnly,reportRepositoriesExcluded:filters.reportRepositoriesExcluded};syncFilterControls();saveFilters();renderList();}
+function syncFilterControls(){ $('search').value=filters.search;renderPickers();$('drafts').value=filters.drafts;$('sort').value=filters.sort;$('triage-filter').value=filters.triageEffort;renderFilterPresets();}
+function clearFilters(){resetToDefault();}
 document.addEventListener('click',async event=>{
  const view=event.target.closest('[data-view]');if(view){if(typeof showQueue==='function')showQueue(false);showReporting(false);filters.view=view.dataset.view;saveFilters();renderList();return;}
- if(event.target.closest('[data-clear]')||event.target.closest('#clear-filters')){clearFilters();return;}
+ if(event.target.closest('[data-clear]')||event.target.closest('#clear-filters')){resetToDefault();return;}
  if(event.target.closest('#toast-show')){const action=showAction;showAction=null;$('toast').hidden=true;action?.();return;}
  if(event.target.closest('#undo')){const action=undoAction;undoAction=null;$('toast').hidden=true;try{await action?.();}catch(error){notify(error.message);}return;}
  const copy=event.target.closest('[data-copy]');if(copy){try{await navigator.clipboard.writeText(copy.dataset.copy);notify('Session reference copied.');}catch{notify('Could not access the clipboard. Session: '+copy.dataset.copy);}return;}
@@ -418,23 +486,48 @@ async function reviewLaunched(url,result){
  await loadState();
  const run=state?.prs.find(p=>p.url===url)?.run;if(run?.transport==='in-app')openReview(run.run_id);
 }
-let guidanceUrl='';
-function openGuidance(url){
+let guidanceUrl='',guidanceRequest=0;
+function guidanceRevision(source){return source.revision||(!source.head?'Revision not recorded':`Commit ${source.head.slice(0,12)}`);}
+function renderGuidanceSources(sources){
+ const container=$('guidance-sources');
+ const notes=(sources?.notes||[]).map(note=>`<label class="review-context-option"><input type="checkbox" data-guidance-note="${esc(note.id)}"><span><strong>Private note</strong><small>${esc(guidanceRevision(note))}${note.selections?` · ${note.selections} code ${note.selections===1?'selection':'selections'}`:''}</small><span>${esc(note.preview||'Empty note')}</span></span></label>`);
+ const conversations=(sources?.conversations||[]).map(thread=>`<label class="review-context-option"><input type="checkbox" data-guidance-conversation="${esc(thread.id)}"><span><strong>Ask AI conversation</strong><small>${esc(guidanceRevision(thread))} · ${thread.messages||0} messages · ${thread.answers||0} ${thread.answers===1?'answer':'answers'}</small><span>${esc(thread.preview||'Conversation')}</span></span></label>`);
+ container.innerHTML=notes.concat(conversations).join('')||'<p class="muted">No private notes or Ask AI conversations are saved for this PR.</p>';
+ $('guidance-context-count').textContent='No private context selected.';
+}
+function selectedGuidanceContext(){
+ const notes=[...document.querySelectorAll('#guidance-sources [data-guidance-note]:checked')].map(input=>input.dataset.guidanceNote);
+ const conversations=[...document.querySelectorAll('#guidance-sources [data-guidance-conversation]:checked')].map(input=>input.dataset.guidanceConversation);
+ return notes.length||conversations.length?{notes,conversations}:null;
+}
+function updateGuidanceSelectionCount(){const count=document.querySelectorAll('#guidance-sources input:checked').length;$('guidance-context-count').textContent=count?`${count} private source${count===1?'':'s'} selected.`:'No private context selected.';}
+async function openGuidance(url){
  if(settingsDirty){notify('Save or discard your AI settings before starting a review.');showSettings('ai-settings');return;}
- guidanceUrl=url;
- $('guidance-title').textContent=state?.prs.find(p=>p.url===url)?.title||url;
- $('guidance-text').value='';$('guidance-dialog').showModal();$('guidance-text').focus();
+ guidanceUrl=url;const request=++guidanceRequest,pr=state?.prs.find(item=>item.url===url);
+ $('guidance-title').textContent=pr?.title||url;$('guidance-text').value='';$('guidance-sources').innerHTML='<p class="muted">Loading saved notes and conversations…</p>';$('guidance-context-count').textContent='No private context selected.';$('guidance-dialog').showModal();$('guidance-text').focus();
+ try{
+  const query=new URLSearchParams({url,head:pr?.head_sha||''}),response=await fetch('/api/workspace-context?'+query);
+  const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not load private context.');
+  if(request===guidanceRequest&&guidanceUrl===url)renderGuidanceSources(result);
+ }catch(error){if(request===guidanceRequest&&guidanceUrl===url)$('guidance-sources').innerHTML=`<p class="muted">Could not load private context. You can still start the review without it.</p>`;}
 }
 $('guidance-text').addEventListener('keydown',event=>{if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){event.preventDefault();$('guidance-form').requestSubmit();}});
+$('guidance-sources').addEventListener('change',updateGuidanceSelectionCount);
 $('guidance-form').addEventListener('submit',async event=>{
  event.preventDefault();
  const url=guidanceUrl,submit=event.submitter||$('guidance-form').querySelector('[type=submit]');
  if(!url||busy.has(url))return;
  busy.add(url);submit.disabled=true;
- try{const result=await post('/regenerate-review',{url,retry:false,guidance:$('guidance-text').value});$('guidance-dialog').close();await reviewLaunched(url,result);}
+ try{const body={url,retry:false,guidance:$('guidance-text').value},context=selectedGuidanceContext();if(context)body.workspace_context=context;const result=await post('/regenerate-review',body);$('guidance-dialog').close();await reviewLaunched(url,result);}
  catch(error){notify(error.message);}finally{submit.disabled=false;busy.delete(url);renderList(true);}
 });
 for(const [id,key] of [['search','search'],['drafts','drafts'],['sort','sort'],['triage-filter','triageEffort']])$(id).addEventListener(id==='search'?'input':'change',()=>{filters[key]=$(id).value;saveFilters();renderList();});
+$('filter-preset').addEventListener('change',()=>{selectedPresetId=$('filter-preset').value;renderFilterPresets();});
+$('filter-preset-apply').addEventListener('click',applySelectedPreset);
+$('filter-preset-default').addEventListener('click',toggleDefaultPreset);
+$('filter-preset-rename').addEventListener('click',renameSelectedPreset);
+$('filter-preset-delete').addEventListener('click',deleteSelectedPreset);
+$('filter-preset-save').addEventListener('click',saveCurrentPreset);
 
 // Keep a legible avatar fallback if a profile image is missing or unavailable.
 document.addEventListener('error',event=>{if(event.target.matches?.('.author-avatar'))event.target.hidden=true;},true);

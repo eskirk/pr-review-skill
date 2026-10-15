@@ -20,6 +20,7 @@ const {chromium}=require(process.env.PR_REVIEW_PLAYWRIGHT_MODULE||'playwright');
   assert.ok(pr);
   pr.artifacts={};pr.run=null;pr.history=[];pr.history_total=0;
   await page.route('**/api/state',route=>route.fulfill({json:snapshot}));
+  await page.route('**/api/workspace-context*',route=>route.fulfill({json:{notes:[{id:'note-context-1',preview:'Check the saved note',revision:'Current commit',selections:1}],conversations:[{id:'11111111-1111-1111-1111-111111111111',preview:'What should the review verify?',revision:'Current commit',messages:2,answers:1}],limits:{max_chars:48000}}}));
   let failNext=false;
   await page.route('**/regenerate-review',async route=>{
    assert.equal(route.request().method(),'POST');
@@ -77,12 +78,15 @@ const {chromium}=require(process.env.PR_REVIEW_PLAYWRIGHT_MODULE||'playwright');
   await card.getByRole('button',{name:'Run with guidance…',exact:true}).click();
   assert.equal(await card.locator('.pr-overflow').evaluate(element=>element.open),false,'Opening guidance must close the actions menu');
   assert.equal(await page.locator('#guidance-title').textContent(),pr.title);
+  await dialog.locator('[data-guidance-note]').check();
+  await dialog.locator('[data-guidance-conversation]').check();
   await dialog.getByRole('textbox').fill('Docs only; skip tests.');
   await dialog.getByRole('textbox').press('Control+Enter');
   await card.locator('[data-action="/regenerate-review"]:disabled',{hasText:'AI review in progress'}).waitFor({state:'attached'});
   assert.equal(await card.locator('[data-review-guidance]').count(),0,'Active runs must not offer guided launches');
   assert.equal(launches.length,4);
   assert.equal(launches[3].guidance,'Docs only; skip tests.');
+  assert.deepEqual(launches[3].workspace_context,{notes:['note-context-1'],conversations:['11111111-1111-1111-1111-111111111111']});
   assert.equal(await dialog.evaluate(element=>element.open),false);
 
   // A finished report of an older commit offers an update, emphasised as the pre-check suggests.

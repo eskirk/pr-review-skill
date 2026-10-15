@@ -789,6 +789,59 @@
   font-size: 12px;
   margin: 0 0 14px;
 }
+.review-context-picker {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  margin: 14px 0;
+}
+.review-context-picker h3 {
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+.review-context-sources {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+  margin: 10px 0;
+}
+.review-context-option {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+  border-radius: 5px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.review-context-option:hover {
+  background: var(--soft);
+}
+.review-context-option input {
+  margin-top: 3px;
+}
+.review-context-option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.review-context-option strong,
+.review-context-option small,
+.review-context-option > span > span {
+  display: block;
+}
+.review-context-option strong {
+  font-size: 12px;
+}
+.review-context-option small {
+  color: var(--muted);
+  font-size: 10px;
+  margin: 2px 0;
+}
+.review-context-option > span > span {
+  font-size: 11px;
+  line-height: 1.4;
+}
 .review-empty {
   max-width: 550px;
   margin: 55px auto;

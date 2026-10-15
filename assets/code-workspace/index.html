@@ -267,9 +267,15 @@
             placeholder="Only iOS code changed; validate on iOS only.&#10;Docs-only change; skip builds and tests."
           ></textarea
         ></label>
+        <section class="review-context-picker" aria-labelledby="guidance-context-heading">
+          <h3 id="guidance-context-heading">Optional private context</h3>
+          <p class="muted">Choose saved notes or Ask AI conversations to quote in this review. Selected content is sent to the AI provider; it is not treated as instructions.</p>
+          <div id="guidance-sources" class="review-context-sources"></div>
+          <p id="guidance-context-count" class="muted" aria-live="polite">No private context selected.</p>
+        </section>
         <p class="muted">
-          Steers scope and validation for this run only. The reviewer still
-          reports serious issues it notices.
+          Guidance steers scope and validation for this run only. The reviewer
+          still reports serious issues it notices.
         </p>
         <div class="note-actions">
           <button class="button primary" type="submit">Start review</button

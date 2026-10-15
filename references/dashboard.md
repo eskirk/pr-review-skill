@@ -80,8 +80,11 @@ GitHub history or run models. Existing automatic saved-review checks still apply
 
 Requested from you includes direct reviewer requests and assignments.
 Watching includes open PRs from watched repositories. Your PRs includes
-your authored PRs. Hidden PRs can be restored. Filters are saved in the
-browser, independently from the registry. Legacy star filters are ignored.
+your authored PRs. Hidden PRs can be restored. Last-used filters and named inbox
+presets are saved in the browser, independently from the registry. Setting a
+default does not change the current filters; **Reset to default** applies it
+explicitly. Reporting repository filters are not part of inbox presets. Legacy
+star filters are ignored.
 Rows emphasize the PR title with repository and PR number above it. The side
 panel shows age since GitHub creation alongside recent activity. Missing opening
 dates show “Age unknown” until a GitHub refresh; first-seen time is never used as
@@ -271,12 +274,16 @@ that exact ID to the agent. Reuse it. The tracker ID is the launch identity;
 never attach whichever unrelated run happens to finish next.
 
 **Run with guidance…** opens a dialog for optional steering text (up to 2,000
-characters). `/regenerate-review` accepts it as `guidance`; the text is
-appended to the agent prompt as reviewer guidance for scope, validation and
-effort, stored in the run's launch metadata and shown under the card's AI run
-details. It never overrides the no-publishing and secret-handling rules, and
+characters). The dialog also offers individual private notes and whole Ask AI
+conversations as optional quoted context. `/regenerate-review` accepts the
+steering text as `guidance` and selected source IDs as `workspace_context`; the
+server resolves the local sources and appends their displayed text after the
+reviewer guidance. Only conversation prompts and completed assistant responses
+are included; drafts and tool activity are omitted. Selected context is stored
+in the local run prompt and source IDs/counts are recorded in launch metadata.
+It never overrides the no-publishing and secret-handling rules, and
 the report must state which checks the guidance skipped. Plain launches send no
-guidance.
+guidance or private context.
 
 When a finished report covers an older commit, the card and the workspace AI
 review tab offer **Update AI review** beside **Run full AI review**.

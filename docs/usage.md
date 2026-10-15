@@ -252,8 +252,11 @@ reads are limited to the checkout and the PR's AI review files. Codex runs shell
 commands in its sandbox without network access, token-like environment variables or
 approval requests. Claude uses a restricted read/web tool set plus bounded
 Git/GitHub read tools; shell, edits, hooks and imported MCP servers are disabled.
-Private notes remain local. Streamed answers, public activity and source links
-appear in the conversation.
+Private notes remain local by default. When you explicitly select notes or Ask AI
+conversations in the guided review dialog, the selected content is sent as quoted
+context to the configured AI provider and retained in that review's local run
+history. Streamed answers, public activity and source links appear in the
+conversation.
 
 GitHub review threads appear under the lines they discuss, and **Comments** lists
 every thread plus the general PR conversation. Show all, only unresolved, or no
