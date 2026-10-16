@@ -14,6 +14,7 @@ import workspace_github as github
 import workspace_store as store
 import workspace_chat as chat
 import workspace_comments as comments
+import workspace_context as private_context
 import pr_review_tracker as tracker
 
 URL='https://github.com/example/repo/pull/1'
@@ -46,7 +47,50 @@ class Workspace(unittest.TestCase):
         changed=copy.deepcopy(self.comparison);changed['revision']='next';changed['files'][0]['fingerprint']='changed'
         state=store.reconcile(URL,changed)
         self.assertEqual(state['viewed'],{'src/b.ts':'unchanged'})
-        self.assertEqual(state['notes'],[{'text':'Private'}])
+        self.assertEqual(state['notes'][0]['text'],'Private')
+        self.assertTrue(state['notes'][0]['id'])
+        self.assertTrue(state['notes'][0]['created_at'])
+
+    def test_selected_notes_and_conversations_are_quoted_without_tool_logs(self):
+        state=store.reconcile(URL,self.comparison)
+        state=store.save(URL,self.comparison,{'version':state['version'],'revision':REV,'viewed':[],'collapsed':[],
+            'notes':[{'text':'Check the timeout edge','head':HEAD,'base':BASE}]})
+        note_id=state['notes'][0]['id']
+        thread_id='11111111-1111-1111-1111-111111111111'
+        chat.save(URL,{'id':thread_id,'base':BASE,'head':HEAD,'status':'completed','messages':[
+            {'role':'user','text':'What should the review verify?'},
+            {'role':'assistant','text':'Verify the timer cleanup.','reads':[{'kind':'read_file','path':'secret'}],
+             'sources':[{'url':'https://secret.example'}]}]})
+        sources=private_context.summaries(URL,HEAD)
+        self.assertEqual(sources['notes'][0]['id'],note_id)
+        self.assertEqual(sources['conversations'][0]['id'],thread_id)
+        prompt,meta=private_context.build(URL,{'notes':[note_id],'conversations':[thread_id]},HEAD)
+        self.assertIn('Check the timeout edge',prompt)
+        self.assertIn('What should the review verify?',prompt)
+        self.assertIn('Verify the timer cleanup.',prompt)
+        self.assertNotIn('secret.example',prompt)
+        self.assertNotIn('read_file',prompt)
+        self.assertEqual(meta['notes'],[note_id])
+        with self.assertRaisesRegex(ValueError,'no longer available'):
+            private_context.build(URL,{'notes':['missing-note']},HEAD)
+
+    def test_context_sources_are_isolated_per_pull_request(self):
+        other_url='https://github.com/example/repo/pull/2'
+        other_state=store.reconcile(other_url,self.comparison)
+        other_state=store.save(other_url,self.comparison,{'version':other_state['version'],'revision':REV,'viewed':[],'collapsed':[],
+            'notes':[{'id':'other-note-1','text':'Other PR note'}]})
+        other_thread='22222222-2222-2222-2222-222222222222'
+        chat.save(other_url,{'id':other_thread,'base':BASE,'head':HEAD,'status':'completed','messages':[
+            {'role':'user','text':'Other PR question'},
+            {'role':'assistant','text':'Other PR answer'}]})
+        current=private_context.summaries(URL,HEAD)
+        self.assertNotIn('other-note-1',{item['id'] for item in current['notes']})
+        self.assertNotIn(other_thread,{item['id'] for item in current['conversations']})
+        with self.assertRaisesRegex(ValueError,'no longer available'):
+            private_context.build(URL,{'notes':['other-note-1']},HEAD)
+        with self.assertRaisesRegex(ValueError,'no longer available'):
+            private_context.build(URL,{'conversations':[other_thread]},HEAD)
+        self.assertEqual(other_state['notes'][0]['id'],'other-note-1')
 
     def test_historical_note_save_does_not_change_latest_progress(self):
         state=store.reconcile(URL,self.comparison)

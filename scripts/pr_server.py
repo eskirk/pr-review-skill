@@ -29,6 +29,7 @@ import workspace_chat
 import workspace_comments
 import workspace_report
 import workspace_progress
+import workspace_context
 
 ASSETS = Path(__file__).resolve().parent.parent / 'assets'
 MUTATIONS = {'/ai-config','/triage-config','/triage-feedback','/triage-run','/triage-reestimate','/artifact-opened','/queue','/refresh-queue','/recover-reviews','/refresh-reporting','/refresh','/hide','/unhide','/snooze','/unsnooze','/set-config',
@@ -169,6 +170,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(200,workspace_comments.load(url,query.get('refresh',[''])[0] == '1'))
                 elif parsed.path == '/api/workspace-chat':
                     self._send(200,workspace_chat.snapshot(url,query.get('thread_id',[''])[0]))
+                elif parsed.path == '/api/workspace-context':
+                    self._send(200,workspace_context.summaries(url,query.get('head',[''])[0]))
                 elif parsed.path == '/api/workspace-ai':
                     self._send(200, ai_settings.selected('chat'))
                 elif parsed.path == '/api/workspace-review':
@@ -284,7 +287,8 @@ class Handler(BaseHTTPRequestHandler):
             if path in ('/regenerate-review','/regenerate-explainer'):
                 result=runtime.start_launch(str(data.get('url','')),
                     'review' if path.endswith('review') else 'explainer', retry=data.get('retry') is True,
-                    guidance=data.get('guidance', ''), mode=str(data.get('mode') or 'full'))
+                    guidance=data.get('guidance', ''), mode=str(data.get('mode') or 'full'),
+                    workspace_context=data.get('workspace_context'))
                 self._send(202,result); return
             if path in ('/snooze', '/unsnooze'):
                 if path == '/snooze' and data.get('days') is None:

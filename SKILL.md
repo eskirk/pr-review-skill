@@ -338,11 +338,14 @@ identify the new run's exact reviewed SHAs.
 
 After synthesis, use the user's chosen writing-style skill if available. For
 installations using `my-feedback-voice`, read that skill and its examples before
-drafting. Custom voice is optional: when no style skill is configured or available,
-continue with the neutral guidance below. Do not require an installation or personal
-examples to complete the review. Explicit user instructions to use a particular
-skill still take precedence. Read [Review note format](references/review-notes.md)
-before writing the artifact.
+drafting. The dashboard worker injects the configured skill contents when it can
+resolve them, and records the source metadata for the run. Apply custom voice only
+to copyable comments, summaries and replies. It cannot override this workflow's
+review, safety, evidence or no-publishing rules. Custom voice is optional: when no
+style skill is configured or available, continue with the neutral guidance below.
+Do not require an installation or personal examples to complete the review. Explicit
+user instructions to use a particular skill still take precedence. Read
+[Review note format](references/review-notes.md) before writing the artifact.
 
 - Put each finding in a collapsible section with severity and a descriptive
   title visible when closed. Keep the overall assessment outside these sections;

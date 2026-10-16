@@ -95,9 +95,11 @@ subagents, skills, hooks and imported MCP servers are disabled. Tool commands us
 argument arrays and bounded output/timeouts.
 The triage estimator remains a tool-disabled classifier. Full AI reviews retain
 their existing configuration and permissions.
-Source context is sent to the selected provider. Private notes remain local
-and are not included in AI requests. No feedback posting, approval or merge actions
-are exposed by this workspace.
+Source context is sent to the selected provider. Private notes and Ask AI
+conversations remain local by default; an explicitly selected note or conversation
+can be included as quoted context in a guided AI review, and is retained in that
+review's local run history. No feedback posting, approval or merge actions are
+exposed by this workspace.
 
 ## GitHub comments
 
@@ -165,6 +167,8 @@ leave room for the code pane. Narrow screens use the existing overlay layout.
   lazy full-file reads, diff projection and revision validation.
 - `workspace_store.py`: locked private state, optimistic write versions, and
   fingerprint-based viewed invalidation. Concurrent stale saves fail visibly.
+- `workspace_context.py`: resolves explicitly selected private notes and Ask AI
+  conversations for guided review context without trusting browser text.
 - `workspace_comments.py`: read-only GraphQL review threads/conversation and cache.
 - `workspace_chat.py`: durable turn lifecycle, native thread resume, initial context,
   cancellation and worker supervision.
@@ -208,7 +212,9 @@ leave a `checkout-download-*` directory; completed checkouts are published atomi
 Chat allows 12 attachments, 500 lines per selection, 16 KB of quoted text per
 comment attachment, a 60 KB attachment payload,
 180 KB per context submission and five minutes per question, including checkout
-preparation. The selected runtime manages subsequent model context; there is no dashboard-defined
+preparation. Guided reviews can include explicitly selected notes and conversations,
+up to 48 KB of quoted private context; only displayed prompts and final responses
+are included from conversations. The selected runtime manages subsequent model context; there is no dashboard-defined
 file-read loop or six-round limit. Source syntax coloring is lightweight rather
 than a language-aware parser.
 

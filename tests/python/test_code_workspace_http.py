@@ -28,6 +28,16 @@ class WorkspaceHTTP(test_dashboard.HTTP):
                 self.assertEqual(self.request('/assets/code-workspace/'+asset)[0],200)
             self.assertEqual(self.request('/assets/code-workspace/../../SKILL.md')[0],404)
 
+    def test_private_context_endpoint_is_origin_checked(self):
+        query='?'+urlencode({'url':URL,'head':'b'*40})
+        self.assertEqual(self.request('/api/workspace-context'+query,headers={'Origin':'https://evil.example'})[0],403)
+        code,_,body=self.request('/api/workspace-context'+query)
+        self.assertEqual(code,200)
+        value=json.loads(body)
+        self.assertEqual(value['notes'],[])
+        self.assertEqual(value['conversations'],[])
+        self.assertIn('max_chars',value['limits'])
+
     def test_embedded_report_retains_opaque_sandbox(self):
         report=self.root/'report.html';report.write_text('<h1>Review</h1>')
         with patch.object(workspace,'review',return_value={'artifact':{'path':str(report),'version':'v1'}}):

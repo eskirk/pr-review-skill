@@ -14,6 +14,7 @@ import ai_cost
 import ai_settings
 import review_update
 import review_verdict
+import workspace_context as selected_workspace_context
 from agent_options import CATALOG
 
 ARTIFACT_NAMES = ('review-html', 'explanation-html', 'review-markdown')
@@ -127,7 +128,7 @@ def summarize_run(run, checked_sha=''):
     return {'run_id': run['run_id'], 'status': status, 'tool': run.get('tool', ''),
         'created_at': run.get('created_at', ''), 'updated_at': run.get('updated_at', ''),
         'head_sha': run.get('head_sha', ''), 'session_reference': run.get('session_reference', ''),
-        'kind': launch.get('kind', 'review'), 'mode': launch.get('mode', 'full'), 'guidance': launch.get('guidance', ''), 'transport': 'in-app' if job or launch.get('transport') in ('codex-sdk', 'in-app') else 'legacy',
+        'kind': launch.get('kind', 'review'), 'mode': launch.get('mode', 'full'), 'guidance': launch.get('guidance', ''), 'workspace_context': launch.get('workspace_context', {}), 'transport': 'in-app' if job or launch.get('transport') in ('codex-sdk', 'in-app') else 'legacy',
         'progress': reviews.progress(run, status) if job else None, 'cost': ai_cost.for_run(run['run_id']) if job else None,
         'message': job.get('message', '') or launch.get('message', '') or run.get('control', {}).get('message', ''),
         'tasks': [{'name': t['task'], 'status': t['status'], 'message': t.get('message', '')} for t in run.get('tasks', [])],
@@ -235,7 +236,7 @@ def previous_review(canonical, entry, mode):
     return prior, check
 
 
-def start_launch(url, kind, retry=False, guidance='', mode='full'):
+def start_launch(url, kind, retry=False, guidance='', mode='full', workspace_context=None):
     canonical, *_ = tracker.canonical_pr_url(url)
     guidance = review_guidance(guidance)
     if kind not in ('review', 'explainer'):
@@ -260,6 +261,8 @@ def start_launch(url, kind, retry=False, guidance='', mode='full'):
                     'transport': summarize_run(active[0])['transport']}
         if mode == 'update' and (not prior or prior['head'] == entry.get('head_sha')):
             raise dashboard.DashboardError('The PR changed while checking it. Try again.')
+        private_context_prompt, private_context_meta = selected_workspace_context.build(
+            canonical, workspace_context, current_head=entry.get('head_sha', ''))
         if active and retry:
             for run in active:
                 if reviews.read_job(run['run_id']):
@@ -274,6 +277,8 @@ def start_launch(url, kind, retry=False, guidance='', mode='full'):
         meta = {'kind':kind, 'mode':mode, 'agent':config['provider'], 'transport':transport, 'created_at':tracker.utc_now(), 'message':''}
         if guidance:
             meta['guidance'] = guidance
+        if private_context_meta:
+            meta['workspace_context'] = private_context_meta
         if prior:
             meta.update(previous_run=prior['run_id'], update_chain=prior['chain'] + 1 if mode == 'update' else 0)
             precheck = None
@@ -296,6 +301,7 @@ def start_launch(url, kind, retry=False, guidance='', mode='full'):
             'This request authorizes the complete local review workflow and its local artifacts, '
             'not posting anything to GitHub.')
         prompt += guidance_prompt(guidance)
+        prompt += private_context_prompt
         try:
             reviews.start(run_id, prompt, config)
         except (OSError, dashboard.DashboardError) as error:

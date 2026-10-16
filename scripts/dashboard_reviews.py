@@ -15,7 +15,7 @@ import ai_runtime
 import pr_discussion
 import report_check
 import storage_cleanup
-from review_context import WRAP_UP_PROMPT, message_prompt, review_prompt
+from review_context import WRAP_UP_PROMPT, message_prompt, review_prompt, style_skill_for_job
 import pr_review_tracker as tracker
 from review_jobs import (
     Activity, FINAL, complete_report, events, finish_unfinished_tasks,
@@ -30,6 +30,7 @@ WRAPPED_UP = 'Wrapped up early; review notes cover the evidence gathered so far.
 
 def start(run_id, prompt, config):
     """Spawn a dedicated session so cancellation cannot target other reviews."""
+    style = style_skill_for_job()
     job = {
         'status': 'starting',
         'created_at': tracker.utc_now(),
@@ -39,6 +40,9 @@ def start(run_id, prompt, config):
         'model': config['model'],
         'effort': config['effort'],
         'prompt': prompt,
+        # Store source metadata, not the private style file contents. The worker
+        # reloads this exact path before building the provider prompt.
+        'style_skill': style['metadata'],
     }
     tracker.atomic_write(path(run_id), job)
     python = os.environ.get('PR_REVIEW_PYTHON') or sys.executable
@@ -214,6 +218,10 @@ class ReviewWorker:
     def review(self):
         self.client = self.client_factory()
         job = self.activity.job
+        style = style_skill_for_job(job)
+        if style['metadata'] != job.get('style_skill'):
+            self.activity.state(style_skill=style['metadata'])
+            job = self.activity.job
         def session(session_id):
             tracker.command_set_session(Namespace(run_id=self.run_id, reference=session_id))
             self.activity.state('running', 'Review in progress', thread_id=session_id)
@@ -221,7 +229,7 @@ class ReviewWorker:
         self.activity.state('running', 'Connecting to the selected provider…')
         result = self.client.run(ai_runtime.Request(
             mode='review', cwd=str(tracker.tracker_root()),
-            prompt=review_prompt(self.run_id, job['prompt'], job),
+            prompt=review_prompt(self.run_id, job['prompt'], job, style=style),
             model=job.get('model', ''), effort=job.get('effort', ''),
         ), ai_runtime.Callbacks(emit=self.event, session=session))
         self.cost = result.get('cost')

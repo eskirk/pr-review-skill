@@ -20,6 +20,14 @@ const {chromium}=require(process.env.PR_REVIEW_PLAYWRIGHT_MODULE||'playwright');
   assert.equal(await page.inputValue('#triage-filter'),'quick');
   await page.click('#filters-show');await page.selectOption('#triage-filter','uncertain');assert.equal(await page.locator('#pr-list .pr-row').count(),1);
   await page.click('#clear-filters');assert.equal(await page.locator('#pr-list .pr-row').count(),5);
+  // Saved defaults do not override the last-used filters on load; Reset to default applies them explicitly.
+  await page.selectOption('#triage-filter','quick');assert.equal(await page.locator('#pr-list .pr-row').count(),2);
+  await page.fill('#filter-preset-name','Quick review load');await page.click('#filter-preset-save');
+  await page.selectOption('#filter-preset',{label:'Quick review load'});await page.click('#filter-preset-default');
+  await page.selectOption('#triage-filter','uncertain');assert.equal(await page.locator('#pr-list .pr-row').count(),1);
+  await page.reload();await page.waitForSelector('.pr-row');assert.equal(await page.inputValue('#triage-filter'),'uncertain');
+  await page.click('#filters-show');await page.click('#clear-filters');assert.equal(await page.locator('#pr-list .pr-row').count(),2);
+  await page.click('#filter-preset-delete');await page.click('#clear-filters');assert.equal(await page.locator('#pr-list .pr-row').count(),5);
   await page.selectOption('#sort','effort');
   assert.deepEqual(await page.locator('#pr-list .pr-row').evaluateAll(els=>els.map(e=>e.dataset.pr.split('/').pop())),['1','5','2','3','4']);
   await page.click('#filters-dialog [data-close-dialog]');

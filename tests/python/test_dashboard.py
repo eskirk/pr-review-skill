@@ -237,6 +237,13 @@ class HTTP(Isolated):
   code,headers,body=self.request('/artifact?path='+str(page))
   self.assertEqual(code,200);self.assertIn(b'/artifact?path=',body);self.assertNotIn(b'file://',body)
 
+ def test_guided_context_is_forwarded_without_browser_text(self):
+  context={'notes':['note-context-1'],'conversations':['11111111-1111-1111-1111-111111111111']}
+  with patch.object(s.runtime,'start_launch',return_value={'run_id':'context-run'}) as launch:
+   code,_,body=self.request('/regenerate-review','POST',{'url':URL,'guidance':'Focus','workspace_context':context},self.auth())
+  self.assertEqual(code,202);self.assertEqual(json.loads(body),{'run_id':'context-run'})
+  self.assertEqual(launch.call_args.kwargs['workspace_context'],context)
+
  def test_launch_http_roundtrip_deduplicates(self):
   with patch.object(r.reviews,'start') as launch:
    first=json.loads(self.request('/regenerate-review','POST',{'url':URL},self.auth())[2]);second=json.loads(self.request('/regenerate-review','POST',{'url':URL},self.auth())[2])

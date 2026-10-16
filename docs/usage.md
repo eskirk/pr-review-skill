@@ -165,7 +165,10 @@ averages; weekly counts remain distinct PRs for the week.
 
 - Set `PR_REVIEW_LOCAL_DEV_ROOT` to the directory containing your existing clones.
   It defaults to `~/Development` and is used as a checkout discovery hint.
-- Optionally configure a writing-style skill in your agent for personalized comments.
+- Optionally configure a writing-style skill for personalized comments. Dashboard AI
+  reviews inject `my-feedback-voice` from `~/.pi/agent/skills/` or `~/.agents/skills/`,
+  or from the path in `PR_REVIEW_STYLE_SKILL`, when available. It affects copyable
+  comments, summaries and replies only.
 - Reporting's Europe/Berlin timezone is currently fixed in the backend and UI;
   it is not a dashboard setting.
 - For automatic startup on macOS, generate a launchd plist for your installation
@@ -252,8 +255,11 @@ reads are limited to the checkout and the PR's AI review files. Codex runs shell
 commands in its sandbox without network access, token-like environment variables or
 approval requests. Claude uses a restricted read/web tool set plus bounded
 Git/GitHub read tools; shell, edits, hooks and imported MCP servers are disabled.
-Private notes remain local. Streamed answers, public activity and source links
-appear in the conversation.
+Private notes remain local by default. When you explicitly select notes or Ask AI
+conversations in the guided review dialog, the selected content is sent as quoted
+context to the configured AI provider and retained in that review's local run
+history. Streamed answers, public activity and source links appear in the
+conversation.
 
 GitHub review threads appear under the lines they discuss, and **Comments** lists
 every thread plus the general PR conversation. Show all, only unresolved, or no

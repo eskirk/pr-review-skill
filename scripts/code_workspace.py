@@ -32,7 +32,11 @@ def update_check(url, head, runs):
 
 def load(url, rev=None, progress=None):
     comparison = github.cached(url, rev) if rev else github.manifest(url, progress)
-    private = store.read(url) if rev else store.reconcile(url, comparison)
+    if rev:
+        private = store.ensure_note_metadata(url)
+    else:
+        store.reconcile(url, comparison)
+        private = store.ensure_note_metadata(url)
     return {**comparison, 'chat_config': ai_settings.selected('chat'), 'saved': {**private, 'viewed': [f['path'] for f in comparison['files'] if private['viewed'].get(f['path']) == f['fingerprint']], 'threads': chat.conversations(url)},
             'review': review(comparison['url'], comparison['head'])}
 
