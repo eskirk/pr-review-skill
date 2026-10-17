@@ -4,7 +4,9 @@ Captured September 24, 2026 from the production dashboard assets and bundled
 report renderer at commit `a924abf`. The three `review-*` report images were
 refreshed September 25, 2026 with the renderer in the commit that added
 `review-explainer-light.jpg`. `reporting-cost-light.jpg` was added September 30,
-2026 with the commit that added AI review cost. Headless Chrome, light/dark system themes,
+2026 with the commit that added AI review cost. The three `review-*` images and
+`ai-settings-light.jpg` were refreshed October 17, 2026 for the paper report
+layout and the Repositories I know well setting. Headless Chrome, light/dark system themes,
 1440 × 1050 CSS-pixel viewports (1250 high for live review), JPEG quality 88.
 
 | Image | What it shows | Synthetic source |
@@ -13,11 +15,11 @@ refreshed September 25, 2026 with the renderer in the commit that added
 | `my-reviews-light.jpg` | Queue grouped by turn, with update and move reasons | `my_reviews_browser_fixture.py` |
 | `code-workspace-light.jpg` | Pinned code diff, inline review thread and Comments rail | `workspace_integration_fixture.py` |
 | `live-review-light.jpg` | Stage progress, a question and simulated reply, wrap-up and stop controls | `codex_browser_fixture.py` |
-| `ai-settings-light.jpg` | Independent Triage, AI review and Chat profiles | `workspace_browser_fixture.py` |
+| `ai-settings-light.jpg` | Independent Triage, AI review and Chat profiles, and Repositories I know well | `workspace_browser_fixture.py` |
 | `reporting-dark.jpg` | Daily activity, workday trend lines and a selected day's PRs | `workspace_browser_fixture.py` |
 | `reporting-cost-light.jpg` | 30-day AI review cost, a day's provider split, cost by model and the costliest reviews | `workspace_browser_fixture.py` |
-| `review-overview-light.jpg` | Outcome, current assessment and plain-words summary | `readme_report_fixture.py` |
-| `review-explainer-light.jpg` | Diagram with finding badges and a before/after situation grid | `readme_report_fixture.py` |
+| `review-overview-light.jpg` | Why this PR exists, current assessment, outcome and At a glance | `readme_report_fixture.py` |
+| `review-explainer-light.jpg` | The change: approach note, before/after diagrams and a situation grid with finding badges | `readme_report_fixture.py` |
 | `review-findings-light.jpg` | One finding expanded with its walkthrough, fix sketch and copyable draft | `readme_report_fixture.py` |
 
 All fixtures live in `tests/fixtures/`. Every displayed PR, repository, person,

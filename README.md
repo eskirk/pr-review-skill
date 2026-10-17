@@ -24,7 +24,7 @@ the dashboard does not post comments, approve or merge PRs.
 | **My reviews** | Keep an ordered queue, save private notes and reminders, and see when new commits or replies bring a PR back to you. |
 | **Review load** | Get optional Low, Medium, High or Unsure estimates of how much reviewing a PR will take, split into change scope, required context, complexity and risk, with reasons, filters and a daily call limit. |
 | **AI reviews** | Run Codex or Claude Code, follow live progress, add guidance, optionally include selected private notes or Ask AI conversations, ask questions, wrap up early or stop a run. Existing PR comments are read first, so findings already raised become replies to their threads. Continue a finished review's session in either agent. After small follow-up commits, update a review instead of redoing it: previous findings are re-checked and only the affected parts are redone. Keep the newest reports and run history. |
-| **Review reports** | Read the outcome and assessment, then a short walk of scenes: what changed (before/after, with Mermaid diagrams where call order matters), why it matters, how it works (each change beside its exact diff) and the blast radius, followed by step-by-step findings with fix sketches, copyable draft comments, a short self-check and verification limits, in one HTML report. |
+| **Review reports** | One scrolling page: why the PR exists (sourced from the PR, issue or commits), what is different now, an at-a-glance strip with findings and judgment calls, background with a where-it-sits map for repositories you don't know, the change with a visual that fits it, the key code inline and the blast radius, followed by step-by-step findings with fix sketches, copyable draft comments, a short self-check and verification limits. |
 | **Code workspace** | Read unified or side-by-side diffs, expand context, open full files and track viewed files. Inspect inline GitHub threads and the PR conversation. |
 | **Code chat** | Ask about selected lines or comments, investigate the pinned revision and draft replies. Conversations persist with their original provider, model and revision. |
 | **Reporting** | Explore daily and weekly review/merge activity, completed-week comparisons and workday trends with time-off exclusions, plus estimated AI review cost for the last 30 days. |
@@ -47,13 +47,13 @@ review assistance; you decide which comments to send and whether to approve.
 <details>
 <summary>More screenshots: reports, review queue, live AI reviews, settings, reporting and AI cost</summary>
 
-**Review report:** the outcome and current assessment lead into a walk of scenes, one at a time, starting with what changed.
+**Review report:** why the PR exists, the current assessment, what is different now and an at-a-glance strip, all on one scrolling page.
 
-![Review report opening with its assessment and before/after diagrams of a fictional parser](docs/screenshots/review-overview-light.jpg)
+![Review report opening with a sourced why, its assessment, the outcome and At a glance for a fictional parser](docs/screenshots/review-overview-light.jpg)
 
-**Why it matters:** a concrete example, one callout per situation with the finding it hits, and a grid of each situation before and after.
+**The change:** a claim heading, the rule in plain words, an approach note, before/after diagrams and a grid of each situation with the finding it hits.
 
-![Fictional parser situations with finding badges, followed by a before/after situation grid](docs/screenshots/review-explainer-light.jpg)
+![Fictional parser change with an approach note, before/after flowcharts and a situation grid with finding badges](docs/screenshots/review-explainer-light.jpg)
 
 **Findings:** expand a finding for the problem in one sentence, a walkthrough, whether it is real, a fix sketch and the draft comment.
 
@@ -67,9 +67,9 @@ review assistance; you decide which comments to send and whether to approve.
 
 ![Simulated AI review with stage progress, a question and reply, and wrap-up controls](docs/screenshots/live-review-light.jpg)
 
-**AI settings:** choose a separate provider and model for each feature.
+**AI settings:** choose a separate provider and model for each feature, and list the repositories you know well so their reports skip the basics.
 
-![Independent Triage, AI review and Chat provider settings](docs/screenshots/ai-settings-light.jpg)
+![Independent Triage, AI review and Chat provider settings above the Repositories I know well list](docs/screenshots/ai-settings-light.jpg)
 
 **Reporting:** review and merge activity, trend lines and a selected day's PRs.
 
@@ -81,7 +81,7 @@ review assistance; you decide which comments to send and whether to approve.
 
 </details>
 
-All screenshots use synthetic data, captured September 24–30, 2026 from the actual
+All screenshots use synthetic data, captured September 24–October 17, 2026 from the actual
 UI. See [screenshot provenance and refresh instructions](docs/screenshots/README.md).
 
 ## Install and run
@@ -272,6 +272,7 @@ four complete weeks plus the current week.
 | [Code workspace](references/code-workspace.md) | Diff behavior, GitHub comments, persistent chat and current limits. |
 | [Development](docs/development.md) | Tests, browser setup, repository structure and security scans. |
 | [Screenshot maintenance](docs/screenshots/README.md) | Synthetic fixtures and repeatable screenshot capture. |
+| [Changelog](CHANGELOG.md) | Notable changes, newest first. |
 | [Recovery](RECOVERY.md) | Git recovery procedures. |
 
 ## Development and recovery

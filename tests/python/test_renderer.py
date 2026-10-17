@@ -274,6 +274,13 @@ class WalkReportTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'Mermaid syntax error in the diagram starting “sequenceDiagram”: Parse error on line 2'):render(self.walk())
 
 class MermaidSanitizerTests(unittest.TestCase):
+    def test_wrapped_label_rows_keep_a_word_space(self):
+        from review_mermaid import spaced_rows
+        row='<tspan class="text-outer-tspan row"><tspan class="text-inner-tspan">{}</tspan></tspan>'
+        svg=spaced_rows('<text>'+row.format('a fresh')+row.format('emulator')+'</text>')
+        self.assertIn('a fresh </tspan></tspan><tspan class="text-outer-tspan',svg)
+        self.assertEqual(svg,spaced_rows(svg))
+
     def test_generated_svg_keeps_hooks_but_drops_active_content(self):
         from review_diagram import sanitize_mermaid, DiagramError
         clean=sanitize_mermaid(SEQUENCE_SVG.format(id='mm-1'))
@@ -281,3 +288,298 @@ class MermaidSanitizerTests(unittest.TestCase):
         for svg in ('<svg><foreignObject><div>x</div></foreignObject></svg>','<svg><a href="https://x"><text>x</text></a></svg>',
                     '<svg><script>alert(1)</script></svg>','<svg><rect style="fill:url(https://evil/x)"/></svg>'):
             with self.assertRaises(DiagramError):sanitize_mermaid(svg)
+
+class PaperReportTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        RendererTests.setUpClass();cls.base_data=RendererTests.data;cls.cleanup=RendererTests.temp
+    @classmethod
+    def tearDownClass(cls):cls.cleanup.cleanup()
+    def paper(self):
+        d=copy.deepcopy(self.base_data)
+        d.update(layout='paper',glance={'kind':'logic','blast':'contained','blast_reason':'One local value changes.'},
+                 background={'story':'The counter used a fixed value.','terms':[{'term':'Counter','meaning':'The stored total.'}]})
+        d['sections'][0].update(claim='The counter increases',lede='A small adjustment.')
+        return d
+    def stepper(self):
+        return {'type':'stepper','title':'Follow the change','caption':'Source-traced order.',
+                'visual':{'type':'sequence','title':'Call order','caption':'Two calls.', 'steps':[
+                    {'from':'App','to':'Counter','message':'Read the value.'},
+                    {'from':'Counter','to':'App','message':'Return the value.'}]},
+                'steps':[{'label':'Read','text':'The app reads the counter.','focus':[1]},
+                         {'label':'Return','text':'The counter returns its value.','focus':[2]}]}
+    def test_paper_layers_and_collapsed_tail(self):
+        d=self.paper();d['verification']='Verified source.';d['references']=[{'label':'Contract','url':'https://example.com/spec'}]
+        output=render(d)
+        positions=[output.index(x) for x in ('<h1>A change</h1>','<p class="outcome">','<h2>At a glance</h2>','<h2>Before you read</h2>','<h2>The counter increases</h2>','<section id="review-findings"','<details class="paper-tail">')]
+        self.assertEqual(positions,sorted(positions))
+        self.assertIn('<strong>No findings</strong>',output)
+        self.assertIn('<dt>Counter</dt><dd>The stored total.</dd>',output)
+        self.assertNotIn('<nav class="walk-rail"',output)
+        self.assertNotIn('<div class="walk-scenes"',output)
+        self.assertIn("font-src data:",output)
+        tail=output[output.index('<details class="paper-tail">'):]
+        self.assertIn('id="verification"',tail);self.assertIn('id="references"',tail);self.assertIn('id="provenance"',tail)
+    def test_glance_derives_problems_and_can_override_them(self):
+        d=self.paper()
+        d['review']['markdown']='<details class="review-finding">\n<summary>P2 · The count is wrong</summary>\n\n**The problem in one sentence:** The total drops a value.\n\n</details>\n\n<details class="review-finding">\n<summary>P3 · A label is missing</summary>\n\nA separate explanation.\n\n</details>'
+        output=render(d)
+        self.assertIn('href="#finding-1" data-open-finding>The total drops a value.</a>',output)
+        self.assertIn('href="#finding-2" data-open-finding>A label is missing</a>',output)
+        d['glance']['findings']=[{'text':'A clearer description.','finding':'finding-2'}]
+        self.assertIn('href="#finding-2" data-open-finding>A clearer description.</a>',render(d))
+        for value in (None,{},[{'text':'Bad link.','finding':'Finding 9'}],[{'text':[],'finding':'Finding 1'}],[{'text':'Text','finding':True}]):
+            d['glance']['findings']=value
+            with self.subTest(value=value),self.assertRaises(ValueError):render(d)
+    def test_new_paper_field_validation(self):
+        for field,values in {
+            'title':[None,'word '*13], 'outcome':[None,''],
+            'glance':[None,[],{}, {'kind':'bad','blast':'wide','blast_reason':'Oops'},
+                      {'kind':[],'blast':'wide','blast_reason':'Oops'},
+                      {'kind':'logic','kind_label':42,'blast':'wide','blast_reason':'Oops'},
+                      {'kind':'logic','blast':'huge','blast_reason':'Oops'},
+                      {'kind':'logic','blast':'wide','blast_reason':'word '*13}],
+            'background':[None,{}, {'story':'Old behavior.','terms':[]},
+                          {'story':'Old behavior.','terms':[{'term':'Term','meaning':'word '*100}]},
+                          {'story':'Old behavior.','terms':[{'term':'Term','meaning':True}]},
+                          {'story':'A. B. C. D.','terms':[{'term':'Term','meaning':'Meaning.'}]},
+                          {'story':'Old behavior.','terms':[{'term':'Term','meaning':'Meaning.'}]*6}]
+        }.items():
+            for value in values:
+                d=self.paper();d[field]=value
+                with self.subTest(field=field,value=value),self.assertRaises(ValueError):render(d)
+        d=self.paper();del d['sections'][0]['claim']
+        with self.assertRaises(ValueError):render(d)
+
+    def round_three(self):
+        d=self.paper();d.pop('background')
+        d['why']={'text':'Readers lost the old value.','sources':[{'label':'Issue #223','url':'https://example.com/223'}],'inferred':False}
+        d['orientation']={'open':False,'teaser':'Where the counter sits','map':[
+            {'label':'Caller','name':'read','changed':False},{'label':'Counter','name':'Demo','changed':True},{'label':'Result','changed':False}],
+            'story':'The caller reads a stored total.','compare':'Like a register, except the value is fixed.','terms':[]}
+        d['glance']['judgment']=[{'text':'Should callers see the larger value?','section':'code'}]
+        d['sections'][0]['approach']={'text':'Why not just compute the value?','suggested':True}
+        return d
+
+    def test_optional_paper_blocks_and_order(self):
+        d=self.round_three();output=render(d)
+        self.assertLess(output.index('<h1>A change</h1>'),output.index('<h2>Why this PR exists</h2>'))
+        self.assertLess(output.index('<h2>Why this PR exists</h2>'),output.index('<p class="outcome">'))
+        self.assertIn('<span class="paper-source-chip"><a href="https://example.com/223"',output)
+        self.assertIn('<details class="paper-orientation paper-background"><summary>',output)
+        self.assertIn('aria-label="You are here"',output);self.assertIn('>this PR</small>',output)
+        self.assertIn('<h3>Needs your judgment</h3>',output)
+        self.assertIn('href="#code">Should callers see the larger value?',output)
+        self.assertIn('our note, not stated by the author',output)
+        d['orientation']['open']=True;d['why'].update(sources=[],inferred=True)
+        d['sections'][0]['approach']={'text':'The fixed value avoids a query.','source':{'label':'PR description'}}
+        output=render(d)
+        self.assertIn('paper-background" open>',output);self.assertIn('inferred from the diff</span>',output)
+        self.assertIn('>PR description</span>',output)
+
+    def test_round_three_validates_limits_and_links(self):
+        for field,values in {
+            'why':[None,{'text':'One. Two. Three.','inferred':True},{'text':'word '*46,'inferred':True},
+                   {'text':'Reason.','inferred':False,'sources':[]},{'text':'Reason.','inferred':1},
+                   {'text':'Reason.','inferred':False,'sources':[{'label':'Bad','url':'http://example.com'}]}],
+            'orientation':[None,{'open':False,'teaser':'Where'}, {'open':1,'teaser':'Where','story':'Before.'},
+                           {'open':False,'teaser':'word '*13,'story':'Before.'},
+                           {'open':False,'teaser':'Where','story':'One. Two. Three. Four.'},
+                           {'open':False,'teaser':'Where','story':'word '*120},
+                           {'open':False,'teaser':'Where','map':[{'label':'Node','changed':False}]*3},
+                           {'open':False,'teaser':'Where','story':'Before.','terms':[{'term':'a','meaning':'b'}]*5}]
+        }.items():
+            for value in values:
+                d=self.round_three();d[field]=value
+                with self.subTest(field=field,value=value),self.assertRaises(ValueError):render(d)
+        d=self.round_three();d['background']=self.paper()['background']
+        with self.assertRaisesRegex(ValueError,'orientation or background'):render(d)
+        for value in ([{'text':'One. Two.'}],[{'text':'Question?','section':'missing'}],[{'text':'Question?'}]*4):
+            d=self.round_three();d['glance']['judgment']=value
+            with self.subTest(value=value),self.assertRaises(ValueError):render(d)
+        for value in ({'text':'Note.'},{'text':'One. Two. Three.','suggested':True},
+                      {'text':'Note.','source':{'label':'X'},'suggested':True}):
+            d=self.round_three();d['sections'][0]['approach']=value
+            with self.subTest(value=value),self.assertRaises(ValueError):render(d)
+        d=self.round_three();d['glance']['judgment']=[]
+        self.assertNotIn('<h3>Needs your judgment</h3>',render(d))
+
+    def test_findings_preview_stops_at_two(self):
+        d=self.paper();d['review']['markdown']='\n\n'.join(
+            f'<details class="review-finding">\n<summary>P2 · Problem {i}</summary>\n\n**The problem in one sentence:** Value {i} is lost.\n\n</details>' for i in range(1,5))
+        output=render(d);glance=output.split('<section class="paper-glance"',1)[1].split('</section>',1)[0]
+        self.assertIn('4 findings',glance);self.assertIn('Value 2 is lost.',glance)
+        self.assertNotIn('Value 3 is lost.',glance);self.assertIn('>+2 more</a>',glance)
+
+    def test_explicit_open_excerpts_form_a_pair(self):
+        d=self.paper();excerpts=copy.deepcopy(d['sections'][0]['blocks'])
+        excerpts=[b for b in excerpts if b['type']=='source']
+        for b in excerpts:b['open']=True
+        walk={'type':'code_walk','items':[{'path':'demo.dart','tag':'changed','text':'The counter changes.','diff':excerpts},
+                                         {'path':'caller.dart','tag':'new','text':'The caller reads it.','diff':[{'type':'example','code':'read()','caption':'Read the changed counter.'}]}]}
+        d['sections'][0]['blocks']=[walk];output=render(d)
+        self.assertIn('<div class="paper-excerpt-pair"><figure',output);self.assertNotIn('<summary>More excerpts</summary>',output)
+        excerpts[0]['open']=False;output=render(d)
+        self.assertNotIn('<div class="paper-excerpt-pair">',output);self.assertIn('<summary>More excerpts</summary>',output)
+        excerpts[1]['open']=False
+        with self.assertRaisesRegex(ValueError,'at least one open'):render(d)
+
+    def test_code_walk_badge_comes_from_git(self):
+        d=self.paper();source=[b for b in d['sections'][0]['blocks'] if b['type']=='source'][0]
+        walk={'type':'code_walk','items':[{'path':'demo.dart','tag':'new','text':'The counter changes.','diff':[source]},
+                                         {'path':'caller.dart','tag':'changed','text':'The caller reads it.','diff':[{'type':'example','code':'read()','caption':'Read the changed counter.'}]}]}
+        d['sections'][0]['blocks']=[walk];output=render(d)
+        self.assertIn('<code>demo.dart</code> <span class="code-walk-tag">changed</span>',output)
+        self.assertIn('<code>caller.dart</code> <span class="code-walk-tag">unchanged</span>',output)
+
+    def test_blobless_clone_missing_excerpt_has_clear_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            subprocess.run(['git','clone','--quiet','--no-hardlinks',str(RendererTests.repo),directory],check=True)
+            subprocess.run(['git','-C',directory,'config','remote.origin.partialclonefilter','blob:none'],check=True)
+            d=self.paper();d['repository']=directory
+            render(d)  # Full object data in a partial clone remains usable.
+            oid=subprocess.check_output(['git','-C',directory,'rev-parse',f'{d["head"]}:demo.dart'],text=True).strip()
+            (Path(directory)/'.git'/'objects'/oid[:2]/oid[2:]).unlink()
+            with self.assertRaisesRegex(ValueError,'repository is a blobless partial clone; point at a full or --shared clone'):render(d)
+
+    def test_optional_blocks_do_not_change_legacy_output(self):
+        for layout in ('classic','walk'):
+            d=self.paper();d['layout']=layout;before=render(d)
+            optional=self.round_three()
+            d.update(why=optional['why'],orientation=optional['orientation'])
+            d['glance']['judgment']=optional['glance']['judgment']
+            d['sections'][0]['approach']=optional['sections'][0]['approach']
+            self.assertEqual(before,render(d))
+            self.assertNotIn('// Paper responsive diagrams',before)
+    def test_code_walk_exact_excerpts_and_no_nested_disclosures(self):
+        d=self.paper()
+        walk={'type':'code_walk','example':'Take a counter with one item.','items':[
+            {'path':'demo.dart','tag':'changed','text':'The counter increases.','diff':[d['sections'][0]['blocks'][1]]},
+            {'path':'caller.dart','tag':'new','text':'The caller reads the counter.','diff':[{'type':'example','code':'read();','caption':'Illustrative caller.'}]}]}
+        d['sections'][0]['blocks']=[walk]
+        output=render(d);parsed=SourceText();parsed.feed(output)
+        self.assertEqual(parsed.lines,RendererTests.after)
+        self.assertIn('<div class="code-walk"><p>Take a counter with one item.</p><ol>',output)
+        self.assertNotIn('Exact excerpts',output)
+        self.assertIn('</p><figure class="source"',output)
+        self.assertNotIn('<span class="path">demo.dart</span>',output)
+        for change in ({'items':[]},{'items':walk['items']*4}):
+            d['sections'][0]['blocks']=[{**walk,**change}]
+            with self.assertRaises(ValueError):render(d)
+        for change in ({'tag':'existing'},{'tag':[]},{'path':'../secret'},{'text':None},{'text':'One. Two.'},{'text':'one. two.'},{'diff':[]},
+                       {'diff':[{'type':'details','title':'Nested','blocks':[]}]},{'diff':[{'type':'paragraph','text':'No excerpt'}]}):
+            d['sections'][0]['blocks']=[{**walk,'items':[{**walk['items'][0],**change},walk['items'][1]]}]
+            with self.subTest(change=change),self.assertRaises(ValueError):render(d)
+    def test_code_walk_first_source_inline_and_paths_once(self):
+        d=self.paper();source=d['sections'][0]['blocks'][1]
+        example={'type':'example','code':'read();','caption':'Illustrative caller.'}
+        d['sections'][0]['blocks']=[{'type':'code_walk','items':[
+            {'path':'demo.dart','tag':'changed','text':'The counter increases.','diff':[example,source,source]},
+            {'path':'demo.dart','tag':'changed','text':'The counter returns.','diff':[source]}]}]
+        output=render(d);body=output.split('<div class="code-walk">',1)[1].split('</ol>',1)[0]
+        self.assertEqual(body.count('<code>demo.dart</code>'),2)
+        self.assertNotIn('<span class="path">demo.dart</span>',body)
+        self.assertLess(body.index('<figure class="source"'),body.index('<details>'))
+        self.assertIn('<summary>More excerpts</summary><figure class="source"',body)
+
+    def test_stepper_validation_and_readable_fallback_in_all_layouts(self):
+        for layout in ('classic','walk','paper'):
+            d=self.paper();d['layout']=layout;d['sections'][0]['blocks']=[self.stepper()]
+            output=render(d)
+            self.assertNotIn('class="stepper-controls"',output)
+            self.assertIn('<li data-focus="[1]"><button type="button" class="stepper-note" aria-pressed="false"><strong>Read</strong><span>The app reads the counter.</span></button></li>',output)
+            self.assertIn('The counter returns its value.',output)
+            self.assertIn('class="sequence-step normal"',output)
+        for change in ({'title':[]},{'caption':None},{'visual':{'type':'diagram'}},{'steps':[]},{'steps':[self.stepper()['steps'][0]]*9}):
+            d=self.paper();d['sections'][0]['blocks']=[{**self.stepper(),**change}]
+            with self.subTest(change=change),self.assertRaises(ValueError):render(d)
+        for change in ({'label':None},{'text':'One. Two.'},{'text':'one. two.'},{'focus':[]},{'focus':[0]},{'focus':[3]},{'focus':[True]},
+                       {'focus':[1,1]},{'focus':'1'},{'finding':'Finding 1'}):
+            d=self.paper();stepper=self.stepper();stepper['steps'][0].update(change);d['sections'][0]['blocks']=[stepper]
+            with self.subTest(change=change),self.assertRaises(ValueError):render(d)
+    def test_stepper_defaults_and_graphic_focus_validation(self):
+        d=self.paper();stepper=self.stepper()
+        for step in stepper['steps']: del step['focus']
+        d['sections'][0]['blocks']=[stepper]
+        output=render(d)
+        self.assertIn('data-focus="[1]"',output);self.assertIn('data-focus="[2]"',output)
+        self.assertLess(output.index('<div class="stepper-visual">'),output.index('<ol class="stepper-texts">'))
+        self.assertNotIn('data-stepper="motion"',output)
+        stepper['visual']={'type':'diagram','caption':'A static drawing.','html':'<svg viewBox="0 0 200 100"><g id="dg-start"><rect width="40" height="40"/></g><path id="dg-arrow" d="M40 20 L180 20"/></svg>'}
+        self.assertIn('data-focus="[&quot;dg-start&quot;]"',render(d))
+        self.assertIn('data-focus="[&quot;dg-arrow&quot;]"',render(d))
+        for focus in ([1],['dg-missing'],['dg-start','dg-start']):
+            stepper['steps'][0]['focus']=focus
+            with self.subTest(focus=focus),self.assertRaisesRegex(ValueError,'focus needs unique ids'):render(d)
+        stepper['steps'][0]['focus']=['dg-start']
+        stepper['visual']['html']='<svg><defs><marker id="dg-only"><path d="M0 0L1 1"/></marker></defs></svg>'
+        with self.assertRaisesRegex(ValueError,'drawable targets'):render(d)
+        stepper['visual']['html']='<div id="dg-duplicate"></div><div id="dg-duplicate"></div>'
+        with self.assertRaisesRegex(ValueError,'unique drawable'):render(d)
+
+    def test_walk_hint_only_for_inspectable_mermaid_participants(self):
+        import review_mermaid
+        d=self.paper();d['layout']='walk'
+        self.assertNotIn('Click a diagram participant to inspect it.',render(d))
+        source='sequenceDiagram\nA->>B: Read\nB-->>A: Return'
+        visual={'type':'mermaid','source':source}
+        svg='<svg><g data-et="participant" data-id="A"></g><line data-et="message"/><line data-et="message"/></svg>'
+        with patch('review_mermaid.render_all',return_value={review_mermaid.diagram_id(source):svg}):
+            stepper=self.stepper();stepper['visual']=visual;d['sections'][0]['blocks']=[stepper]
+            self.assertNotIn('Click a diagram participant to inspect it.',render(d))
+            d['sections'][0]['blocks'].append(visual)
+            self.assertIn('Click a diagram participant to inspect it.',render(d))
+
+    def test_mermaid_stepper_uses_prerendered_message_and_source_node_hooks(self):
+        from unittest.mock import patch
+        import review_mermaid
+        d=self.paper();stepper=self.stepper();d['sections'][0]['blocks']=[stepper]
+        source='sequenceDiagram\nA->>B: Read\nB-->>A: Return'
+        stepper['visual']={'type':'mermaid','source':source}
+        for step in stepper['steps']:del step['focus']
+        svg='<svg><line data-et="message"/><path data-et="message"/></svg>'
+        with patch('review_mermaid.render_all',return_value={review_mermaid.diagram_id(source):svg}):
+            self.assertIn('data-visual="mermaid-sequence"',render(d))
+            stepper['steps'][1]['focus']=[3]
+            with self.assertRaisesRegex(ValueError,'indices in range'):render(d)
+        source='flowchart LR\nA[Read] named@--> B[Return]'
+        stepper['visual']['source']=source;stepper['steps'][1].pop('focus')
+        svg='<svg><g class="node default" id="mm-test-flowchart-A-0"></g><g class="node" id="mm-test-flowchart-B-1"></g></svg>'
+        with patch('review_mermaid.render_all',return_value={review_mermaid.diagram_id(source):svg}):
+            output=render(d)
+            self.assertIn('data-focus="[&quot;A&quot;]"',output)
+            self.assertIn('data-focus="[&quot;B&quot;]"',output)
+            self.assertIn('data-edges="{&quot;named&quot;: [&quot;A&quot;, &quot;B&quot;]}"',output)
+            stepper['steps'][1]['focus']=['Missing']
+            with self.assertRaisesRegex(ValueError,'ids present in the Mermaid source'):render(d)
+        stepper['visual']['source']='stateDiagram-v2\n[*] --> Read'
+        with patch('review_mermaid.render_all',return_value={}):
+            with self.assertRaisesRegex(ValueError,'sequenceDiagram or flowchart'):render(d)
+
+    def test_rejects_manual_numbering_and_supports_absent_cases(self):
+        d=self.paper()
+        for block in ({'type':'list','items':['1. Read data.']},
+                      {'type':'comparison','lanes':[{'title':'Before','steps':['2. Read data.']}]},
+                      {**self.stepper(),'steps':[{'label':'Read','text':'1. Read data.'},self.stepper()['steps'][1]]}):
+            d['sections'][0]['blocks']=[block]
+            with self.assertRaisesRegex(ValueError,'must not start with a number'):render(d)
+        d['sections'][0]['blocks']=[{'type':'cases','columns':['Situation','Before','After'],'caption':'Feature availability.',
+                                  'rows':[{'situation':'Save filters','cells':[{'status':'absent','text':'No saved presets'},{'status':'works','text':'Apply a preset'}]}]}]
+        output=render(d)
+        self.assertIn('class="case-absent" data-label="Before"><span class="case-status">Not available</span>: No saved presets',output)
+        for layout in ('classic','walk'):
+            d['layout']=layout;output=render(d)
+            self.assertNotIn('// Reader-advanced visual steps',output)
+            self.assertNotIn('/* Layered code walk',output)
+
+    def test_stepper_flow_and_finding_link(self):
+        d=self.paper();d['review']['markdown']='<details class="review-finding">\n<summary>P2 · Wrong value</summary>\n\nThe value is wrong.\n\n</details>'
+        stepper=self.stepper();stepper['steps'][1]['finding']='Finding 1'
+        stepper['visual']={'type':'flow','title':'Data path','caption':'Source trace.','steps':[{'label':'Read','detail':'Read input.'},{'label':'Return','detail':'Return output.'}]}
+        d['sections'][0]['blocks']=[stepper]
+        output=render(d)
+        self.assertIn('href="#finding-1" data-open-finding>⚠ Finding 1</a>',output)
+        d['review']['visuals']={'path':stepper}
+        d['sections'][0]['blocks']=[]
+        d['review']['markdown']=d['review']['markdown'].replace('The value is wrong.', '<!-- review-visual:path -->')
+        self.assertIn('class="stepper"',render(d))

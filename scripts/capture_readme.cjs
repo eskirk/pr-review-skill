@@ -117,13 +117,11 @@ async function fixture(name, action) {
   const page = await browser.newPage({viewport: {width: 1440, height: 1050}, colorScheme: 'light'});
   await page.goto(pathToFileURL(report).href);
   await capture(page, 'review-overview-light');
-  // Walk reports show one scene at a time; the rail switches scenes.
-  await page.locator('.walk-rail a[href="#why"]').click();
-  await page.locator('.walk-body').evaluate(el => el.scrollIntoView());
+  // Paper reports are one scrolling page; capture the change section and the findings.
+  await page.locator('#change').evaluate(el => el.scrollIntoView());
   await capture(page, 'review-explainer-light');
-  await page.locator('.walk-rail a[href="#review-findings"]').click();
   await page.locator('.review-finding > summary').nth(0).click();
-  await page.locator('.walk-body').evaluate(el => el.scrollIntoView());
+  await page.locator('#review-findings').evaluate(el => el.scrollIntoView());
   await capture(page, 'review-findings-light');
   console.log('Captured ten README images from production assets and synthetic fixtures.');
 })().catch(error => {console.error(error); process.exitCode = 1;}).finally(async () => {

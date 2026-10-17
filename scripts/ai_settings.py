@@ -6,12 +6,32 @@ import re
 import pr_review_tracker as tracker
 from agent_options import CATALOG, DEFAULTS
 
+KNOWN_REPOSITORIES_LIMIT = 200
+REPOSITORY_PATTERN = re.compile(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/[A-Za-z0-9._-]{1,100}')
+
+
+def validate_known_repositories(values):
+    if not isinstance(values, list) or len(values) > KNOWN_REPOSITORIES_LIMIT:
+        raise ValueError('Enter at most 200 repositories, one owner/repo per line.')
+    result = []
+    for value in values:
+        if not isinstance(value, str) or not REPOSITORY_PATTERN.fullmatch(value.strip()):
+            raise ValueError('Use owner/repo for each repository (no URLs or wildcards).')
+        value = value.strip().lower()
+        if value.split('/')[1] in ('.', '..'):
+            raise ValueError('Use a valid repository name.')
+        if value not in result:
+            result.append(value)
+    return result
+
 
 def load():
     import pr_dashboard as dashboard
     raw = tracker.read_json(dashboard.config_path(), required=False)
     if 'ai' in raw:
-        return copy.deepcopy(raw['ai'])
+        result = copy.deepcopy(raw['ai'])
+        result.setdefault('known_repositories', [])
+        return result
     # Read-only migration. Persist only when settings are explicitly saved.
     result = {key: {'provider': 'codex', 'profiles': copy.deepcopy(profiles)} for key, profiles in DEFAULTS.items()}
     legacy = raw.get('agent_profiles', {})
@@ -33,6 +53,7 @@ def load():
     result['triage'].update(provider=provider, enabled=old_triage.get('enabled', False),
                             daily_limit=old_triage.get('daily_limit', 30), batch_limit=old_triage.get('batch_limit', 10))
     result['triage']['profiles'][provider] = {'model': old_triage.get('model', DEFAULTS['triage'][provider]['model']), 'effort': old_triage.get('reasoning', '')}
+    result['known_repositories'] = []
     return result
 
 
@@ -64,9 +85,12 @@ def save(settings, expected_revision=None):
         previous = load()
         if expected_revision is not None and expected_revision != revision(previous):
             raise ValueError('AI settings changed in another window. Reload before saving.')
-        if not isinstance(settings, dict) or set(settings) != set(DEFAULTS):
+        if not isinstance(settings, dict) or set(settings) != set(DEFAULTS) | {'known_repositories'}:
             raise ValueError('Configure Triage, AI review and Chat.')
-        for feature, entry in settings.items():
+        settings = copy.deepcopy(settings)
+        settings['known_repositories'] = validate_known_repositories(settings['known_repositories'])
+        for feature in DEFAULTS:
+            entry = settings[feature]
             if not isinstance(entry, dict) or not isinstance(entry.get('provider'), str) or entry['provider'] not in DEFAULTS[feature]:
                 raise ValueError('Choose a supported provider for each feature.')
             if not isinstance(entry.get('profiles'), dict) or set(entry['profiles']) != set(DEFAULTS[feature]):

@@ -171,13 +171,14 @@ responsible for sandbox execution and app lifecycle to avoid duplicate builds.
 
 Follow [Explanation](references/explanation.md) using the same pinned source.
 Draft the JSON narrative sections; do not render or register a separate HTML.
-Render with `"layout": "walk"`. The opening is a short walk of scenes, each one
-claim: what changed (Before/After), why it matters when the benefit needs proof
-(a concrete example, situation callouts, the cases grid), how it works (each
-logical change paired with its exact hunks), and the blast radius (Not in the
-blast / In the blast, ending with a merge gate). Use Mermaid sequence diagrams
-where call or event order explains the change; see
-[Explanation](references/explanation.md). Keep one or two self-check questions.
+Render with `"layout": "paper"`: one scrolling page with a claim title, a
+sourced "why this PR exists" lead, a short standfirst, At a glance (kind, blast
+radius, findings, rare judgment questions), a background with a where-it-sits
+map when the prompt's `Reader familiarity` calls for it, one section on the change
+with the visual that fits its kind, code changes shown inline in plain words,
+and the blast radius ending with a merge gate. See
+[Explanation](references/explanation.md) for word caps, diagram choice and the
+absolute-claim pass. Keep one or two self-check questions.
 Use the normal concise depth unless the user asks for more detail. After finding
 verification, reconcile the opening, examples and caveats with the final review.
 The lead assembles and validates the complete report only after synthesis.
@@ -390,7 +391,8 @@ the pinned source and evidence, and to report each problem with the exact
 location and the correct fact:
 
 - every “always”, “never”, “only”, “every”, “all”, “nothing changes” and “can't”
-  in the explanation, diagrams, grid rows and findings;
+  in the explanation, diagrams, grid rows and findings, in every mode: flags on
+  and off, paused or disabled features, other transports and callers;
 - every diagram node, arrow and ordering, and every grid cell;
 - every fix sketch and suggestion block against the fix-sketch rules in
   [Review notes](references/review-notes.md): declared variables, imports,

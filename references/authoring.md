@@ -4,11 +4,14 @@ Write JSON as inert content. Explanation fields are plain text; use literal
 code names in prose. Findings and verification use restricted Markdown. The
 renderer owns HTML,
 syntax highlighting, controls, escaping and source links. Choose sections and
-block types that explain this particular change.
+block types that explain this particular change. Use `"layout": "paper"` for new
+reports. Omitting `layout` still selects classic for older inputs.
 
 ```json
 {
+  "layout": "paper",
   "title": "A concrete behavioral title",
+  "glance": {"kind": "logic", "blast": "contained", "blast_reason": "Only the changed path is affected."},
   "outcome": "The problem, changed behavior, and essential condition.",
   "mode": "Brief · Small",
   "stack": "Dart · OpenTelemetry SDK",
@@ -20,22 +23,22 @@ block types that explain this particular change.
   "context": "Historical comparison, prepared YYYY-MM-DD. PR state checked separately.",
   "comment_attribution": {"tool": "Claude Code", "model": "claude-opus-5-5", "person": "Robert"},
   "sections": [
-    {"id": "plain-words", "title": "In plain words", "blocks": [
+    {"id": "plain-words", "title": "In plain words", "claim": "In plain words", "blocks": [
       {"type": "paragraph", "text": "Who is affected, what used to happen, what happens now, and the condition that matters."}
     ]},
-    {"id": "shape", "title": "How the decision is made", "blocks": [
+    {"id": "shape", "title": "How the decision is made", "claim": "How the decision is made", "blocks": [
       {"type": "diagram", "title": "Which driver a widget gets",
        "html": "<div class=\"dg-stack\"><div class=\"dg-node\">A widget builds</div><div class=\"dg-arrow\"></div><div class=\"dg-node dg-bad\">Custom binding: answers no <span class=\"dg-badge\">⚠ Finding 1</span></div></div>",
        "caption": "Source-traced from the pinned head. What to notice."}
     ]},
-    {"id": "cases", "title": "What happens in each situation", "blocks": [
+    {"id": "cases", "title": "What happens in each situation", "claim": "What happens in each situation", "blocks": [
       {"type": "cases", "columns": ["Situation", "Before", "After"], "caption": "Source-traced; row 2 reproduced.",
        "rows": [
          {"situation": "Normal widget test", "cells": [{"status": "works", "text": "test driver"}, {"status": "works", "text": "test driver"}]},
          {"situation": "Custom test binding", "finding": "Finding 1", "cells": [{"status": "works", "text": "test driver"}, {"status": "breaks", "text": "real driver"}]}
        ]}
     ]},
-    {"id": "code", "title": "How it works", "blocks": [
+    {"id": "code", "title": "How it works", "claim": "How it works", "blocks": [
       {"type": "source", "path": "lib/example.dart", "side": "head", "start": 10, "end": 15,
        "caption": "Step 2 in the diagram: how this excerpt produces the result."}
     ]}
@@ -144,7 +147,11 @@ turns orange. Record coverage honestly; it is the only input you control.
   example a wrapped-up run); the card turns grey "Not fully reviewed".
 - `traced`: whether every changed path was traced end to end, not only read.
 - `tests`: `pass`, `fail` or `not-run` for the tests covering the change at the
-  reviewed head. Reading a test is not running it.
+  reviewed head. Reading a test is not running it. `fail` renders “Checks failed”,
+  which may include reviewer probes rather than repository tests. Optional
+  `tests_note` (plain text, at most 15 words) appears beside the tests status;
+  identify the check scope, for example `"tests_note": "Reviewer probes failed; repository tests passed."`.
+  The note does not change confidence or imply a repository regression.
 - `runtime`: `validated` when the changed behavior was exercised, `not-needed`
   when no runtime behavior changes, otherwise `not-run`. Optional
   `runtime_note` names what was not exercised.
@@ -241,6 +248,177 @@ the installed Chrome, or `PR_REVIEW_CHROME_PATH`.
              "caption": "Waiters block with no deadline (Finding 1)."}]}]}
 ```
 
+### Paper layout and layered blocks
+
+Default to `"layout": "paper"` for new reports: a continuous page using the walk
+fonts and palette. There is no scene rail. Order: masthead and verdict,
+standfirst (`outcome`), At a glance, optional background, authored sections,
+findings, then a collapsed tail containing questions, verification, references
+and provenance. Use the existing `stats` object for additions, deletions and
+file count. Sections require `claim` as their heading; `lede` is optional.
+The title is at most 12 words. Keep `outcome` to one or two sentences and 40
+words; the browser checker warns when it is longer. The prose budget includes
+the standfirst, why, judgment questions, approach notes, background, section prose, step notes and code-walk sentences,
+excluding masthead, verdict, paths, excerpts, diagram labels and findings.
+Paper targets: docs 250 words; config/ci/deps/refactor/test 300; logic/ui/api 450;
+lifecycle/data 600. The checker warns above the target and fails above 1.5×.
+Paper reports in Deep mode, and walk/classic reports, use the mode-based limits.
+
+```json
+{"layout":"paper", "title":"Retries retain the original deadline",
+ "outcome":"Queued events keep their deadline when the connection returns.",
+ "stats":{"additions":20,"deletions":8,"files":2},
+ "glance":{"kind":"lifecycle","blast":"contained","blast_reason":"Only queued exports change."},
+ "sections":[{"id":"change","title":"The change","claim":"Reconnecting preserves the deadline",
+   "lede":"The queue forwards the caller's limit.",
+   "blocks":[{"type":"paragraph","text":"A queued event keeps the same limit when it is replayed."}]}]}
+```
+
+`glance` is required in paper. Its `kind` is `docs`, `config`, `ci`, `deps`,
+`logic`, `lifecycle`, `data`, `ui`, `refactor`, `api` or `test`. Optional
+`kind_label` is a plain label of at most six words. `blast` is `contained`,
+`moderate` or `wide`; `blast_reason` is at most 12 words. The third tile shows
+the finding count and the first two linked problem sentences, then “+N more”. By default
+these come from **The problem in one sentence:** in `review.markdown`, falling
+back to the summary title. Zero findings shows “No findings”, followed by the
+coverage-gap count when the verdict has gaps. Override the
+linked lines with `findings`, each `{text, finding}`; `finding` names an existing
+`Finding N` or `finding-N` anchor. Text is one sentence.
+Optional `judgment` is a list of zero to three `{text, section?}` objects.
+Each `text` is a one-sentence policy or trade-off question for the human;
+`section`, when present, must name an authored section id. Nonempty lists render
+as “Needs your judgment”; empty lists are hidden. The compact jump row beneath
+At a glance links to existing change, code, blast-radius and findings targets.
+
+```json
+{"glance":{"kind":"lifecycle","kind_label":"Queue ordering","blast":"contained",
+ "blast_reason":"Only queued exports change.",
+ "findings":[{"text":"Replay loses the caller's deadline.","finding":"Finding 1"}]}}
+```
+
+Optional top-level `background` renders “Before you read”. Its `story` is one
+to three sentences, followed by a compact definition list of one to five
+`terms`, each `{term, meaning}`. Keep the complete background within 100 words.
+The review prompt's `Reader familiarity: familiar` means omit background and
+glossary for that repository. `Reader familiarity: new` (also the default when
+absent) permits background only for unfamiliar concepts needed to understand
+the change. Preserve exact code identifiers; explain them without renaming them.
+
+```json
+{"background":{"story":"Events wait in a queue while the connection is down.",
+ "terms":[{"term":"Replay","meaning":"Sending the waiting events again."}]}}
+```
+
+Optional paper blocks (omitting them preserves the existing authored layers):
+
+- `why`: `{text, sources?: [{label, url?}], inferred}`. `text` is at most two
+  sentences and 45 words. `inferred` is a required boolean; require at least one
+  source unless true. Source labels are plain text and optional URLs must be
+  HTTPS without credentials. Renders visibly under the title as “Why this PR
+  exists”, with source chips and an “inferred from the diff” chip when true.
+- `orientation`: an alternative to `background`; providing both is rejected.
+  Required `open` is boolean and `teaser` is at most 12 words. Native details
+  summary reads “Background” plus the teaser. Require `map` or `story`.
+  `map` has three to six `{label, name?, changed}` items: a plain-word label,
+  optional real identifier without whitespace, and required boolean `changed`.
+  At least one item must change; changed boxes are labelled “this PR”.
+  `story` is at most three sentences. Optional `terms` has zero to four
+  `{term, meaning}` definitions; optional `compare` is one sentence.
+  All authored orientation text, including teaser, map labels and names, must
+  total at most 120 words. The checker counts orientation in the explanation
+  cap only when initially open; the renderer enforces 120 words in either state.
+- Section-level `approach`: `{text, source?: {label, url?}, suggested?: bool}`.
+  `text` is one or two sentences, rendered after section prose in an “Approach”
+  callout. Require a source, or `suggested: true` to label it “our note, not
+  stated by the author”; source and suggested true are mutually exclusive.
+
+```json
+{"why":{"text":"Queued events lost their original deadline.",
+ "sources":[{"label":"Issue #223","url":"https://github.com/owner/repo/issues/223"}],"inferred":false},
+ "orientation":{"open":false,"teaser":"Where the queue sits",
+  "map":[{"label":"App","changed":false},{"label":"Queue","name":"ReplayQueue","changed":true},{"label":"Exporter","changed":false}],
+  "story":"The app queues events while disconnected.","terms":[]},
+ "glance":{"kind":"lifecycle","blast":"contained","blast_reason":"Only queued exports change.",
+  "judgment":[{"text":"Should replay preserve an expired deadline?","section":"change"}]}}
+```
+
+`code_walk` works in every layout. Use two to six numbered `items`, each with a
+repository-relative `path`, one-sentence
+`text`, and non-empty `diff` containing only `source` or `example` blocks.
+The file badge (new, changed, removed or unchanged) comes from `git diff
+--name-status` between base and head; an authored `tag` is ignored. An
+unchanged consumer shown for context is badged unchanged.
+Optional `example` is a concrete introductory sentence. The first source excerpt of each item is visible inline, with any preceding
+examples. Later excerpts may use a native disclosure. Each file path appears
+once per item, in its chip or first distinct source header. Source ranges retain
+the 15-line limit and exact pinned extraction. Authored examples remain
+explicitly illustrative.
+In paper, each `diff` excerpt may set boolean `open`: true keeps it inline,
+false puts it under “More excerpts”. Omitted values retain the first-source
+default; at least one excerpt must stay open. When the two open excerpts are
+one base and one head source, they sit side by side at 1000px and wider, stacking
+below that width. The checker warns on code-walk text and excerpt captions with
+fewer than four words. Blobless partial clones must contain the excerpt blobs;
+otherwise point `repository` at a full or `--shared` clone.
+
+```json
+{"type":"code_walk","example":"Take an event queued while offline.","items":[
+ {"path":"src/queue.ts","tag":"changed","text":"The queue keeps the deadline.",
+  "diff":[{"type":"source","path":"src/queue.ts","start":10,"end":14,"caption":"The stored deadline."}]},
+ {"path":"src/export.ts","tag":"changed","text":"Replay forwards the stored deadline.",
+  "diff":[{"type":"source","path":"src/export.ts","start":20,"end":24,"caption":"The replay call."}]}]}
+```
+
+`stepper` keeps its schema and works in every layout, rendering a numbered
+diagram with every note visible. Use it when order or a handoff benefits from
+optional focus. It requires `title`, `caption`, one complete `visual`,
+and two to eight `steps`. Each step has `label`, one-sentence `text`, optional
+`focus`, and optional `finding` linking an existing finding. Do not put manual
+numbering such as `1. ` in list items, step labels, or step text; the renderer
+supplies numbering and rejects numbered text.
+
+| Visual | Focus targets | Default when `focus` is omitted |
+| --- | --- | --- |
+| `mermaid` with `sequenceDiagram` | Unique 1-based message indices; text and both participants highlight together | Message i for step i |
+| `mermaid` with `flowchart` or `graph` | Node ids from the source; edges between focused nodes also highlight | Node i in rendered/source encounter order |
+| `diagram` | Unique `dg-*` ids in sanitized markup, outside `defs`/`marker` | Element i with an id, in markup order |
+| `flow` / `sequence` | Unique 1-based step indices | Visual step i |
+
+Explicit `focus` is a non-empty array. Missing ids, duplicate targets, indices
+outside the visual, and defaults beyond the available elements fail rendering
+with the step number and available targets. Put diagram ids on drawable groups,
+nodes, or arrows; use explicit focus when grouping several elements or when
+visual order differs from explanatory order. Mermaid remains pre-rendered SVG,
+with no runtime dependency in the report. State diagrams are not stepper visuals.
+
+Every note stays visible below the full-width diagram, in columns where space allows.
+Number badges mark each note's focus elements. Click a note or one of its badges
+to highlight its elements and dim the rest; click the same note/badge again or
+press Escape to clear. Notes and badges are keyboard focusable; Enter and Space
+toggle focus. Highlighting is instant, with no animation or stepping controls.
+Without JavaScript and in print, readers get the complete visual and every
+explanation as an ordered list.
+
+Match the visual to the change: sequences for component handoffs over time,
+state flows for UI transitions, flowcharts for branching validation. Use a
+before/after value or case table when that explains a small change. Omit diagrams
+for straightforward documentation, copy and configuration changes.
+
+```json
+{"type":"stepper","title":"Follow a queued event","caption":"Source-traced call order.",
+ "visual":{"type":"mermaid","source":"sequenceDiagram\nConnection->>Queue: Reconnect\nQueue->>Exporter: Replay with deadline"},
+ "steps":[{"label":"Reconnect","text":"The connection asks the queue to resume."},
+          {"label":"Replay","text":"The queue forwards the deadline."}]}
+```
+
+```json
+{"type":"stepper","title":"Trace the handoff","caption":"An illustrative handoff.",
+ "visual":{"type":"diagram","caption":"Input reaches output.",
+   "html":"<svg viewBox=\"0 0 220 60\"><g id=\"dg-input\"><rect x=\"5\" y=\"5\" width=\"60\" height=\"50\" fill=\"none\" stroke=\"currentColor\"/></g><path id=\"dg-send\" d=\"M70 30 L210 30\" stroke=\"currentColor\"/></svg>"},
+ "steps":[{"label":"Input","text":"The input is ready.","focus":["dg-input"]},
+          {"label":"Send","text":"The input crosses the boundary.","focus":["dg-send"]}]}
+```
+
 ### Diagrams, cases grids and optional interaction
 
 Choose the representation using [Explanation](explanation.md); reuse a block
@@ -274,7 +452,9 @@ only when it fits the concept.
   `rows` (one to eight) and `caption`, optional `title`. Each row has
   `situation`, optional `finding` (for example `"Finding 1"`, shown as a badge)
   and one `cells` entry per outcome column with `text` and `status`: `works`
-  ✅, `breaks` ❌, `changes` ⚠️, `unknown` ❔ or `same` (no mark). Marks are
+  ✅, `breaks` ❌, `changes` ⚠️, `unknown` ❔, `absent` (visible “Not available”)
+  or `same` (no mark). Use `absent` when a feature did not exist in a Before
+  column; reserve `breaks` for behavior that fails. Marks are
   also given in words for screen readers.
 
 The shared renderer also supports:
@@ -293,7 +473,7 @@ The shared renderer also supports:
   execution of PR code.
 
 For a graphic inside a finding, define a `diagram`, `cases`, `table`, `flow`,
-`sequence` or `scenario` block in `review.visuals`, keyed by a short identifier, and place `<!-- review-visual:timeout -->` on its own line where it
+`sequence`, `scenario` or `stepper` block in `review.visuals`, keyed by a short identifier, and place `<!-- review-visual:timeout -->` on its own line where it
 belongs. For example:
 
 ```json

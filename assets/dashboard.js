@@ -504,7 +504,7 @@ function updateGuidanceSelectionCount(){const count=document.querySelectorAll('#
 async function openGuidance(url){
  if(settingsDirty){notify('Save or discard your AI settings before starting a review.');showSettings('ai-settings');return;}
  guidanceUrl=url;const request=++guidanceRequest,pr=state?.prs.find(item=>item.url===url);
- $('guidance-title').textContent=pr?.title||url;$('guidance-text').value='';$('guidance-sources').innerHTML='<p class="muted">Loading saved notes and conversations…</p>';$('guidance-context-count').textContent='No private context selected.';$('guidance-dialog').showModal();$('guidance-text').focus();
+ $('guidance-title').textContent=pr?.title||url;$('guidance-text').value='';$('guidance-deep').checked=false;$('guidance-sources').innerHTML='<p class="muted">Loading saved notes and conversations…</p>';$('guidance-context-count').textContent='No private context selected.';$('guidance-dialog').showModal();$('guidance-text').focus();
  try{
   const query=new URLSearchParams({url,head:pr?.head_sha||''}),response=await fetch('/api/workspace-context?'+query);
   const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not load private context.');
@@ -518,7 +518,7 @@ $('guidance-form').addEventListener('submit',async event=>{
  const url=guidanceUrl,submit=event.submitter||$('guidance-form').querySelector('[type=submit]');
  if(!url||busy.has(url))return;
  busy.add(url);submit.disabled=true;
- try{const body={url,retry:false,guidance:$('guidance-text').value},context=selectedGuidanceContext();if(context)body.workspace_context=context;const result=await post('/regenerate-review',body);$('guidance-dialog').close();await reviewLaunched(url,result);}
+ try{const body={url,retry:false,guidance:$('guidance-text').value,deep_explanation:$('guidance-deep').checked},context=selectedGuidanceContext();if(context)body.workspace_context=context;const result=await post('/regenerate-review',body);$('guidance-dialog').close();await reviewLaunched(url,result);}
  catch(error){notify(error.message);}finally{submit.disabled=false;busy.delete(url);renderList(true);}
 });
 for(const [id,key] of [['search','search'],['drafts','drafts'],['sort','sort'],['triage-filter','triageEffort']])$(id).addEventListener(id==='search'?'input':'change',()=>{filters[key]=$(id).value;saveFilters();renderList();});

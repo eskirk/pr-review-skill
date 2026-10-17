@@ -1,6 +1,6 @@
 # Review and explanation practices
 
-Research checked 2026-09-15. Use these decisions in the workflow; this is not a
+Research checked 2026-09-15; presentation research updated 2026-10-17. Use these decisions in the workflow; this is not a
 leaderboard or evidence that any public skill is universally best. Browse again
 when a review depends on an uncertain or changing external API or contract.
 
@@ -42,19 +42,65 @@ permissions, and keep final verification independent of reviewer agreement.
   why. Apply progressive detail: a visible outcome and example, then exact code,
   then optional background. Do not infer undocumented author motivation as fact.
 
-Our presentation choice is plain words first, one purpose-built diagram of the
-change, a grid of concrete situations before and after, then exact excerpts tied
-to the diagram's steps. Findings are taught as a one-sentence problem, a
-numbered walkthrough, an explicit “Is it real?” check and a self-contained fix
-sketch. In a local blind comparison in September 2026 (six PRs across five
-repositories, reports written by Claude and Codex, judged by both), this
-combination scored best for understanding the change and the findings; analogies
-did not help. Fuller explanations and sketches introduced more factual errors,
-mostly incomplete sketches and over-broad simplifications, which motivates the
-fact-check stage. The judges favored their own model's output, so treat this as
-indicative, not a user study or a proven optimal teaching method. Keep the current assessment and drafts in
-the same document so explanation and review cannot silently describe different
-revisions or conclusions.
+Our presentation is a single scrolling page that leads with the claim: a title
+and standfirst, an At a glance strip, optional background, one section on the
+change with a diagram only when it fits the change kind, code shown inline, the
+blast radius, then findings ([Explanation](explanation.md)). The evidence behind
+it, all from learning or web-reading studies rather than PR-report trials:
+
+- Mayer's multimedia principles: cutting extraneous material
+  ([coherence and signaling](https://www.cambridge.org/core/books/abs/cambridge-handbook-of-multimedia-learning/principles-for-reducing-extraneous-processing-in-multimedia-learning-coherence-signaling-redundancy-spatial-contiguity-and-temporal-contiguity-principles/C98AB3A6CE760DD63C048936EA0B3B44)),
+  naming key concepts before the mechanism, and meaningful segments
+  ([pre-training and segmenting](https://cambridge.org/core/books/cambridge-handbook-of-multimedia-learning/principles-for-managing-essential-processing-in-multimedia-learning-segmenting-pretraining-and-modality-principles/DD24C2F48B9B1277CE59F78276110258))
+  each improved learning in most tests. Hence no repeated layers, claim
+  headings, finding badges on diagram steps, and a short glossary only when needed.
+- NN/g's [inverted pyramid](https://www.nngroup.com/articles/inverted-pyramid/)
+  and [progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/)
+  observations: put the most important point first and avoid more than two
+  disclosure levels. Usability observations, not controlled effects.
+- [Expertise reversal](https://en.wikipedia.org/wiki/Expertise_reversal_effect):
+  guidance that helps novices can hinder experienced readers, so background
+  depends on the reader's familiarity with the repository and never explains
+  general engineering.
+- [Berney & Bétrancourt (2016)](https://archive-ouverte.unige.ch/unige:92234),
+  61 studies: a small overall benefit of animation (g = 0.23), seen only for
+  realistic animations, not abstract ones such as code diagrams. Diagrams are
+  therefore static.
+- Experienced programmers check a hypothesis against *beacons*, characteristic
+  code lines ([Crosby et al. 2002](https://ppig.org/papers/2002-ppig-14th-crosby/)),
+  so excerpts show the guard or changed call, not whole functions.
+
+In a local blind comparison in September 2026 (six PRs, reports by Claude and
+Codex, judged by both), a purpose-built diagram, a cases grid and the current
+finding format did best; analogies did not help, and fuller explanations
+introduced more factual errors, mostly over-broad simplifications, which
+motivates the fact-check stage. In October 2026 two rounds compared the walk
+layout with the paper layout on four PRs (docs, logic, lifecycle and UI). Round
+1 used Claude and Codex judges and was split; the paper variants lost on
+accuracy. Round 2 added a writing guide, word caps and an absolute-claim
+fact-check, with three blind judges (Claude, Codex, Gemini): paper was
+preferred in 7 of 12 judgements and the fact-check closed the accuracy gap. All
+three judges preferred one scrolling page to scenes, found motion added nothing,
+saw click-through stepping as neutral next to a numbered diagram with every
+note visible, wanted code inline and diagrams only where they fit the change,
+and penalized glossaries of familiar terms and renamed identifiers. Round 3
+(five PRs, three of them new: Swift, a Terraform/Vault monorepo, Android CI)
+added a sourced why lead, a familiarity-gated background with a where-it-sits
+map, judgment questions and an approach note; all three judges preferred it on
+all five PRs, mainly because the why arrived in seconds rather than after
+scrolling, and new codebases became legible from the map. They asked to keep
+judgment and approach rare, put the deciding condition in the top lines, and
+derive file badges from git. Reviewers orient on rationale before inspecting
+code ([Code Review as Decision-Making](https://arxiv.org/html/2507.09637v1)),
+alternatives and side effects are the hardest rationale to recover
+([Al Safwan & Servant 2019](https://people.cs.vt.edu/~khsaf/public/papers/fse19.pdf)),
+and advance organizers help most when prior knowledge is low
+([Mahar 1992](https://www.ideals.illinois.edu/items/20405)). Treat this
+as indicative: judges favor their own model's output, four PRs is a small
+sample, and the judges are models, not the people reading the reports.
+
+Keep the current assessment and drafts in the same document so explanation and
+review cannot silently describe different revisions or conclusions.
 
 ## Evidence for a consumable report
 

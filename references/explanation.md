@@ -1,10 +1,10 @@
 # Explain the change at the top of the review
 
 Help the reader understand what changes, why it matters, and the condition most
-likely to surprise them. Write for a capable colleague switching among many
-repositories: technical experience does not imply fresh context about this
-project or domain. Establish the context needed to understand the change, then
-explain the implementation. This is the opening of the review report; findings follow it.
+likely to surprise them. The reader is a senior engineer reviewing many PRs a
+day across many repositories and stacks: experienced, but often without fresh
+context about this project. Give the missing local context, never the general
+engineering. This is the opening of the review report; findings follow it.
 
 ## Scope and depth
 
@@ -20,224 +20,260 @@ by the PR-review workflow. Git show/diff do not require switching branches.
 Default to **Brief**. Choose Small for a single simple behavioral change;
 Standard for multiple interacting decisions, lifecycle/ownership changes, or a
 substantial compatibility contract. Diff size informs this choice but does not
-decide it: one large file can be complex, many mechanical files can be simple.
-Use **Deep** when the user asks for an in-depth explanation. “Full PR review”
-selects the review pipeline; it does not by itself request a Deep explainer.
+decide it. Use **Deep** only when the user asks for an in-depth explanation.
+“Full PR review” selects the review pipeline, not a Deep explainer. For paper
+reports in Brief mode, the browser check enforces a cap per change kind (it
+warns above the cap and fails above 1.5×); Deep mode uses its 3,000-word limit:
 
-Prose targets: Small 800 words, Standard 1,200, Deep 3,000, including collapsed
-background. The browser check warns above the target and fails above 1.5× it.
-Diagram labels, code and grid text are not counted; they support the prose and
-are not a place to move a long explanation. Targets are limits to aim under,
-not a length to reach. Stop when
-the reader can explain the changed behavior, its mechanism and the consequential
-condition. Add detail when it resolves a real difficulty; do not fill the budget
-or compress away needed context. Use short sentences as a guideline; retain
-essential conditions and caveats instead of cutting them to satisfy a limit.
+| Kind (`glance.kind`) | Explanation prose cap |
+| --- | ---: |
+| `docs` | 250 |
+| `config`, `ci`, `deps`, `refactor`, `test` | 300 |
+| `logic`, `ui`, `api` | 450 |
+| `lifecycle`, `data` | 600 |
 
-## Plain words before names
+Caps cover the why, standfirst, judgment items, open background, section prose,
+approach notes, step notes and code-walk sentences, not code, diagram labels or
+findings. Choose the kind by the behavior that changed, not the file type: a CI
+change with retry and classification branches is `logic` or `lifecycle`. Under the cap is better; cut
+repetition first. Stop when the
+reader can explain the changed behavior, its mechanism and the consequential
+condition. Keep essential conditions and caveats instead of cutting them to fit.
 
-Explaining simply is the goal. Before any project-specific identifier (class,
-method, configuration key, package), say in everyday words what the thing is
-and does; define each unfamiliar term at first use, inline, in a few words. Do
-not assume the reader remembers the architecture from an earlier review. Use
-neutral reader-facing labels such as “In plain words”; never label the reader
-or a section “dumbed down”.
+## The paper layout
 
-A simplification must stay true. Re-check every “always”, “never”, “only”,
-“every”, “nothing changes” and “can't” against the pinned source before keeping
-it; narrow the claim instead. Keep essential mode differences visible:
-simplifying a no-op and a recording path into one universal behavior would
-mislead the reader. Analogies rarely help and often restate the mechanism; use
-one only when it genuinely shortens the explanation, connect it immediately to
-the real objects and say where it stops being accurate.
+Render with `"layout": "paper"` ([Authoring](authoring.md)): one continuous page
+the reader can skim and search, with no scenes to click through. Each layer
+stands alone and adds detail; never restate the layer above.
 
-## Shape the page to the change
+1. **Title**, at most 12 words: the behavior change as a claim.
+2. **Why this PR exists** (`why`, always present): one or two sentences, at
+   most 45 words, on what was missing or wrong before, for whom, and what
+   becomes possible. See below.
+3. **Outcome** (standfirst), one or two sentences and at most 40 words, no code
+   identifiers: what is different now, for whom, and the deciding condition or
+   boundary (“only with batching on”, “diagnoses the hang, does not fix it”).
+   It must not repeat the why: together they read problem → change → caveat.
+   A reader who stops here has the gist, so it must be accurate on its own;
+   detail further down cannot repair a misleading top.
+4. **At a glance** (`glance`): the change kind, blast level with a reason of at
+   most 12 words, the finding problem sentences derived from the review, and
+   **Needs your judgment** (`glance.judgment`) when it applies (see below).
+5. **Background** (`orientation`), by familiarity (see below).
+6. **The change**, one section with a claim heading. State the general rule in
+   at most 100 words, then the one visual for the change kind. Add one concrete
+   example (real input values, a named actor) only when the mechanism is
+   subtle; the visual traces that example. Do not restate the rule after it.
+   Add an `approach` note only when it names a simpler alternative a reviewer
+   would expect and why it was not taken (“`Uri.port` reports 80/443 when no
+   port is written, so the PR parses the raw authority”). Do not restate a code
+   comment or the why. Skip it for docs, deps and config.
+7. **Code changes in plain words** (`code_walk`): two to five items in
+   data/control-flow order (check the order against source), one plain
+   sentence each, tied to a diagram step where relevant (“Step 3 happens
+   here”), with exact excerpts. Choose the visible excerpts with `open`: the
+   guard, the new branch, the deciding consumer, not automatically the first
+   range. For a removal, open both the base and the head excerpt. When an
+   unchanged consumer decides the visible effect (stored URL → channel port),
+   show it; it is badged unchanged.
+8. **Blast radius**: a `compare` of `Not in the blast` (tone `safe`) and
+   `In the blast` (tone `risk`), ending with a `gate` card “Do not merge until…”
+   or “Safe to merge when…”. Keep both panes even for a low-risk PR. Separate
+   changed behavior from changed files: “tracing code is unchanged” is not
+   “tracing signals are unaffected”.
 
-With the walk layout (the default), follow the scene order in "Walk layout"
-below instead of this list. Keep the plain-words idea: in the outcome and in each
-scene's lede, before any identifiers.
+Findings, self-check, verification and provenance follow from the review object.
+Headings state claims (“Retries stop after three failures”), not topics
+(“Retry logic”), so a reader who reads only headings still gets the story.
 
-Lead with a concrete title and a short outcome paragraph: the problem, new
-behavior, and essential condition or trade-off. Put this before navigation and
-long metadata. The renderer shows the PR link and assessment beside it, retains
-full SHAs in expandable provenance, and estimates overview reading time.
+## Why this PR exists
 
-Then use this order, keeping only the parts that add understanding:
+Reviewers look for the rationale first and rarely come back for it. Harvest it
+from the PR description, the linked issue (`Fixes #N`) and commit bodies, in
+that order, and cite each with a `sources` chip. When nothing states it, write
+the most defensible reading of the diff and set `inferred: true`; that chip is
+itself a review signal. Never invent user impact, an incident or author
+rationale, and never paraphrase the title as the reason (“adds batching to
+support batching”). Attribute reported history (“the PR description says four
+nightly runs hung”) rather than presenting it as observed. For docs, deps and
+test PRs one short sentence is enough. Keep the why in every report, whatever
+the familiarity.
 
-1. **In plain words.** Two to four sentences with no code identifiers: who is
-   affected, what used to happen, what happens now, and the one condition that
-   matters. For a self-explanatory change, fold this into the outcome.
-2. **One purpose-built diagram** of the change's shape (see below). Where a
-   finding's failure happens inside the diagram, mark that step with a small
-   badge such as `⚠ Finding 1: titles collide`, so the reader connects the
-   mechanism to the review before reaching the findings.
-3. **What happens in each situation.** A `cases` grid of three to six concrete
-   situations × before/after: the normal path, the case the PR fixes, relevant
-   edge cases and each finding's case, marked works / breaks / changes. Skip it
-   only when every situation behaves the same.
-4. **How it works.** Exact source excerpts in data/control-flow order, each
-   caption tied to a step of the diagram or a row of the grid (“Step 3 in the
-   diagram happens here”). Name the main entry point and a short reading route
-   when several files interact. Beside the main excerpt, briefly identify the
-   supporting test or check when useful, distinguishing source inspection from
-   execution. Keep commands and logs in verification.
-5. **What deserves attention** (optional): one to three specific conditions or
-   trade-offs not already covered by findings, distinguishing documented
-   decisions from inference.
-6. **Also in this PR** (optional): tests, docs and mechanical changes in a
-   short table or collapsed `details` block, unless a test is needed to
-   understand the changed contract.
-7. **Self-check:** one or two questions (see below).
+## Background and reader familiarity
 
-The diagram and grid replace a Before/After `comparison` and replace prose that
-restates them; do not describe the same flow three times. A tiny change may need
-only the outcome, one grid or diagram, and one excerpt. Put general stack
-concepts beyond the plain-words section in collapsed “New to …?” blocks;
-prerequisites and essential caveats remain visible. Deep mode can add
-alternatives; distinguish inferred trade-offs from documented author decisions.
+The review prompt may include `Reader familiarity: familiar` or
+`Reader familiarity: new` for the PR's repository; when it is absent, treat the
+reader as new.
 
-## Walk layout
+- **familiar**: omit `orientation`, or include it with `open: false` only when
+  the PR touches a corner of the repository the reader is unlikely to know.
+- **new**: `orientation` with `open: true`. It orients rather than teaches:
+  - a `map` of three to six boxes on the real path (entry → changed part →
+    consumer), plain words plus the real name, with only the parts this PR
+    changes flagged `changed`; name every component a box stands for;
+  - a `story` of at most three sentences on how this part worked before;
+  - at most one `compare` line tying it to something a senior engineer from
+    another stack knows, saying where it stops being accurate;
+  - zero to four `terms`, only for repository- or stack-specific names.
 
-Render new reports with `"layout": "walk"` ([Authoring](authoring.md)); classic remains for older reports. Each
-narrative section becomes a scene in a left-hand rail, shown one at a time. Give
-every scene a short `tab` label (two or three words), a `claim` headline that
-states the scene's one point in plain words, and an optional one- or two-sentence
-`lede`. Usually three to five scenes, in this order, keeping only the ones that
-add a distinct claim:
+  Map-only or story-only is fine. The `teaser` says what is inside, so a reader
+  can skip it without opening it. When the reader knows the domain but not the
+  code (OTLP known, Dart new), explain the repository's structure and language
+  quirks, never the domain's primitives.
 
-1. **What changed** (`tab`: "What changed"). Old and new behavior together: a
-   `compare` block with `before`/`after` panes. When the PR changes call, request
-   or event order, put a Mermaid `sequenceDiagram` in each pane (or one diagram
-   when only the new path matters). Otherwise use the diagram form that fits.
-2. **Why it matters**, only when the claimed benefit needs proof. Start the lede
-   with "Let's take an example:", call the human actor `User`, and state the
-   goal, scale and assumptions. Use `callouts` (good / warn / bad, one per
-   situation, with the finding badge where a finding fails) and at most one
-   sequence diagram that traces the decisive steps. The cases grid belongs here.
-3. **How it works.** One `pair` per important logical change: the change in
-   plain words plus a few `card`s for the real components (tag `new`, `changed`,
-   `removed` or `existing`; tone `hot` where a finding sits), beside the exact
-   `source` excerpts that implement it. Skip cosmetic hunks. No Mermaid here.
-4. **Blast radius** (always last). A two-pane `compare`: `Not in the blast`
-   (tone `safe`) for untouched contracts and callers, `In the blast` (tone
-   `risk`) for behavior the PR can break, ending with a `gate` card "Do not merge
-   until…" or "Safe to merge when…". Even a low-risk PR keeps both panes.
+Nothing needed for the gist or the review decision may live only inside the
+background: the why and outcome stand alone. Never define universal engineering
+concepts (a retry, a mutex, a feature flag, a hook). Never rename identifiers:
+use the real name and explain it (“`meta`, the attributes sent with each
+signal”), so the reader can match the page to the code. Analogies rarely help;
+use one only when it genuinely shortens the explanation and say where it stops
+being accurate.
 
-Findings, self-check and verification become later scenes automatically. A
-finding whose failure is an ordering problem (race, deadlock, retry, lost
-update) should carry a Mermaid sequence of its failure in `review.visuals`.
+## Needs your judgment
 
-### When to use Mermaid
+`glance.judgment` holds one or two genuine policy or trade-off questions the
+source cannot settle (“Is org-wide `members: read` acceptable for a digest
+bot?”, “Should sessions saved by the old format get a new sampling decision on
+upgrade?”). Name the practical consequence and link the `section` holding the
+evidence. They are not defects (those are findings), test gaps or a restated
+table row. Omit it when there is no real call to make; most fixes, docs and
+deps PRs have none.
 
-Use a Mermaid `sequenceDiagram` when the reader must follow who calls whom in
-what order: request/response paths, retries, threads and locks, lifecycle events,
-start-up and restart. Use a Mermaid `flowchart` only for a real branching
-decision. Skip Mermaid for documentation-only, test-only, rename, dependency-bump
-and pure styling changes, and wherever a cases grid, card or excerpt already says
-it. Keep diagrams to the few actors the story needs (up to about six), messages
-short and in plain words, no semicolons. Every participant, message and order
-must match the pinned source; label diagrams source-traced unless executed.
+## Visual for the change kind
 
-## Choose the diagram for the idea
+Draw a diagram only when its kind matches the structure of the change; a
+mismatched diagram costs attention and adds nothing.
 
-Decide what the reader needs to *see* before choosing a form: a decision tree
-for branching, a timeline for ordering, races or windows, a pipeline for data
-transformations, an ownership or dependency map for responsibility changes, a
-call sequence for propagation, a state machine for lifecycle, or real code with
-numbered callouts. The shape should follow the change; there is no rotation or
-requirement to make every report look different.
+| Change | Visual |
+| --- | --- |
+| docs, copy, trivial value change | None; at most a before/after `compare` of what a reader sees |
+| config, ci, deps | Table of setting × before/after × effect; a Mermaid `flowchart` only if job or stage order changed |
+| logic, parsing, validation | `cases` grid; a small Mermaid `flowchart` or `diagram` of the decision when there is real branching |
+| several components handing off over time (lifecycle, ordering, queues) | Mermaid `sequenceDiagram`, at most about six participants |
+| data transformation | `diagram` pipeline showing one concrete record at each stage |
+| UI flow, especially behind a flag or permission | State or storyboard `diagram` of the screens in order, flag on/off side by side |
+| refactor | Old → new mapping table, or an ownership `diagram` if responsibilities moved |
+| api | Before/after `compare` plus a compatibility table per caller type |
 
-Build it with the `diagram` block (static HTML and inline SVG using the report's
-diagram kit, see [Authoring](authoring.md)), or with `flow`, `sequence` or
-`scenario` when those fit exactly. Label nodes with plain words plus the real
-name. Use at most about 12 nodes; add a second diagram only for a different
-relationship. Every node, arrow, ordering and label must match the pinned
-source: do not draw “every rule” when some rules take another path, and do not
-reorder steps to make the picture tidier. Captions say what to notice and label
-the diagram as source-traced unless it was executed. Do not animate invented
-timings or imply delivery from an export attempt.
+**One primary visual.** Before adding a second representation (diagram, steps
+and cases grid), say what it adds that the first does not, and cut it
+otherwise. Mutually exclusive branches (parser cases, input classes) read faster
+as a cases grid than as a tall flowchart; keep flowcharts to about eight nodes
+and no crossing edges, and prefer a table once a diagram would be taller than a
+screen. Do not use a sequence diagram for simple prop wiring or a single value
+passed through. Keep diagrams to about 12 nodes, labels in plain words plus the real
+name. Every node, arrow, ordering and label must match the pinned source: do not
+draw “every rule” when some take another path, and do not reorder steps for a
+tidier picture. Captions say what to notice and label the diagram source-traced
+unless it was executed. Build with Mermaid, the `diagram` SVG kit, or `flow`,
+`sequence` or `scenario` when they fit exactly ([Authoring](authoring.md)).
 
-Interaction should expose a meaningful choice or state transition; keep the
-central takeaway visible and controls optional. The same approach applies inside
-a finding when a diagram makes its failure path easier to understand.
+**Cases grid.** State the assumptions the rows share in the caption (defaults,
+restore mode, which transport or processor), and qualify a row that depends on
+one. Three to six concrete situations × before/after: the normal
+path, the case the PR fixes, the off-path rows where generalizations break
+(flag off, feature disabled, other transport, other caller), and each finding's
+case. Mark works / breaks / changes honestly; use `absent` for “did not exist
+before”, not `breaks`. When a Before column would only repeat `absent`, use
+“Setting / New value / Effect” or “Reader action / Result” instead.
+
+**Numbered diagram (`stepper`).** Use it when the reader must follow an order
+of events, a moving record, or a sequence of screens. The renderer draws the
+complete diagram with numbered markers and lists every step note below
+it; clicking a note or its marker (or pressing Enter on it) highlights
+those elements. Nothing is hidden behind Prev/Next, and nothing moves. Write
+three to seven steps mapped to drawn messages or nodes. Each note is one
+sentence that adds a fact the drawing does not show (a value, a condition, a
+consequence); never re-read the arrow label. Put `finding` on the step where a
+finding's failure happens. For a four-box flow, a plain diagram is enough.
+
+A finding whose failure is an ordering problem (race, deadlock, retry, lost
+update) should carry a sequence of its failure in `review.visuals`.
+
+## Show code inline
+
+Code changes stay visible in the page: the reader is reviewing code and should
+not need clicks to see it. Show the beacon lines (the guard, the new branch, the
+changed call), not whole functions, and include a few lines of an unchanged
+consumer when it explains the effect. Write the JSON input described in
+[Authoring](authoring.md); `scripts/render_review.py` extracts source from the
+supplied Git repository at the pinned revision with permalinks, line ranges,
+highlighting and changed-line markers.
+
+Prefer excerpts of at most 15 lines. Never replace an exact excerpt with
+shortened or invented statements carrying source-diff styling; for omissions,
+select several short ranges and explain the gap. Authored snippets use the
+**example** block, visibly labeled illustrative; they must not masquerade as
+exact lines. Preserve real source blank lines. Diagrams use semantic HTML/SVG,
+not ASCII art. Do not add dependencies for decoration.
 
 ## Establish the explanation before rendering
 
-Keep a small evidence record alongside the authoring input, outside the reader's
-main narrative. Record:
+Keep a small evidence record (`evidence.md`) alongside the authoring input,
+outside the reader's narrative. Record:
 
-- The main behavior claim and supporting pinned source location. Distinguish
-  implementation behavior, intended policy, and a verified external contract.
-- Each grid row's and toy example's exact input, relevant assumptions,
-  before/after output, and how those outputs were checked. Include separators,
-  missing fields, default values, error handling and ownership when they affect
-  the result.
-- For substantive claims such as “the spec requires,” “always,” or “every SDK,”
-  verify an authoritative source or narrow the claim. A code comment or PR title
-  is not independent evidence that its interpretation of a standard is correct.
-- Which tests assert the behavior. Do not imply that reading a test executed it,
-  or that the existence of a test proves its assertions cover a scenario.
+- The main behavior claim and its pinned source location. Distinguish
+  implementation behavior, intended policy and a verified external contract.
+- Each grid row's and example's exact input, assumptions, before/after output
+  and how it was checked, including separators, missing fields, defaults, error
+  handling and ownership when they affect the result.
+- For claims such as “the spec requires” or “every SDK”, an authoritative
+  source, or a narrower claim. A code comment or PR title is not independent
+  evidence that its interpretation of a standard is correct.
+- Which tests assert the behavior. Reading a test is not executing it, and a
+  test's existence does not prove its assertions cover a scenario.
 
-Trace examples through actual callers and branches. A hand-authored diagram
-illustrates the source; it does not independently validate the implementation.
-Do not invent an observed failure, user impact, consumer, build result or author
-rationale. Label uncertainty that changes the explanation. Preserve deliberate
-scope and material trade-offs even when the intended behavior appears reasonable.
+Do not invent an observed failure, user impact, consumer, timing, build result
+or author rationale. Label uncertainty that changes the explanation. A
+hand-drawn diagram illustrates the source; it does not validate it.
 
-After drafting, check the outcome, diagram, grid, source captions and each quiz
-answer against this record, then pass it to the fact-check stage in `SKILL.md`.
-When this is part of a full review, reconcile with its final synthesis: remove
-rejected warnings, retain material supported caveats, and reconcile with the
-findings below without duplicating the defect list.
+### Absolute-claim pass (mandatory)
 
-## Exact source and authored examples
+Simplifications go wrong most often by becoming universal. Before rendering:
 
-Use the shared renderer by default. Read [Authoring input](authoring.md)
-and write a JSON input; `scripts/render_review.py` extracts source directly
-from the supplied Git repository and pinned revision. It generates source
-permalinks, line ranges, highlighting and changed-line markers. Never replace
-an exact excerpt with shortened or invented statements carrying source-diff
-styling. For omissions, select multiple short ranges and explain the gap.
+1. Start with the why, outcome and At a glance, which many readers stop at.
+   List every sentence, label, grid cell and step note containing every, all,
+   any, always, never, only, nothing, no longer, can't, must, guaranteed, same
+   as, unchanged or pins.
+2. For each, find pinned source that proves it **in every mode**: feature flags
+   on and off, disabled or paused features, other transports or queues, other
+   callers, error and backoff paths, other platforms. If it cannot be proved,
+   narrow it where the claim is made (“with session tracking on”, “for plain
+   URLs on the Dart VM”) or remove it.
+3. Check every ordering claim and every diagram message, node and order, and
+   every “Step N happens here”, against source. “A runs before B” must hold on
+   each path, not only the one traced.
+4. Check version wording: `^1.2.0` is a range, not a pin.
+5. Record claim → file:line → verdict in `evidence.md`.
 
-Prefer excerpts of at most 15 lines. When shortening would hide the relevant
-condition, choose another excerpt or link the full method. Authored snippets
-must use the renderer's **example** block, visibly labeled illustrative code or
-pseudocode; they must not masquerade as exact lines. Preserve real source blank
-lines, with one compact visual row per line.
-
-The shared renderer supports pinned PRs/commits and local working-tree sources.
-For an interaction it cannot express, adapt the shared assets rather than
-replacing all layout and controls. Continue to satisfy the browser,
-source-fidelity, and security checks below. Do not add dependencies merely for
-decoration. Diagrams use semantic HTML/SVG, not ASCII art.
+Then pass the draft to the independent fact-check stage in `SKILL.md`. In a full
+review, reconcile with the final synthesis: remove rejected warnings, keep
+material supported caveats, and do not duplicate the defect list.
 
 ## Self-checks
 
 Default to one or two questions; three at most in Brief mode, five in Deep.
 Favor a scenario that tests a consequential distinction: which branch runs,
 whether data is retained, whose resource closes, or how a partial input
-behaves. A grid row or finding makes a good question source. Do not ask merely
-which file changed or which name was printed when that adds no understanding.
+behaves. A grid row or finding makes a good source. Use two to four plausible,
+comparable choices, one correct; no gotchas or “all/none of the above”. Verify
+each answer against source. The quiz stays collapsed and optional and never
+separates the reader from the findings.
 
-Use two to four plausible choices, one correct. Keep options comparable in
-length and specificity. Avoid nonsense distractors, gotchas, and “all/none of
-the above.” Verify the explanation for each answer against source, not just the
-page's own prose. The shared controls balance answer positions, permit retries
-and reset, reveal feedback in words, and provide keyboard focus. Keep the quiz
-collapsed by default and do not expose correctness before a choice.
+## Colleague-style check
 
-## Colleague-style explanation check
+Can a colleague who reads only the title, why, outcome and At a glance say why
+the PR exists, what changed and where the findings sit? Can a reviewer new to
+the repository, after the background, point to where the change sits? Can they read the grid and say who is better
+or worse off? Group by behavior, not file order; place each excerpt beside its
+claim. Do not invent author intent; distinguish documented rationale from
+inference.
 
-Start with “what problem does this solve for someone?” and one concrete input
-or user action. Can a colleague who reads only the title, outcome, plain-words
-section and diagram say what changed and where the findings sit? Can they read
-the grid and say who is better or worse off? Group by behavior, not
-alphabetical file order. Place each excerpt beside the claim it explains.
+## Legacy layouts
 
-Keep the short explanation and essential caveats visible; deeper background,
-provenance and self-checks may collapse. A self-check must be optional and must
-never separate the reader from the findings. Do not invent author intent;
-distinguish documented rationale from inference.
+Older reports use `"layout": "walk"` (a scene rail, one scene at a time) or the
+classic layout (in plain words, diagram, cases grid, excerpts). The renderer
+still supports both for re-rendering; write new reports in paper.
 
-The report renderer, offline security and visual validation requirements are
-in [Authoring](authoring.md) and the main skill. Do not produce a separate page.
+The renderer, offline security and visual validation requirements are in
+[Authoring](authoring.md) and the main skill. Do not produce a separate page.

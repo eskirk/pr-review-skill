@@ -8,6 +8,7 @@ author can fix the source and render again.
 """
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 
@@ -71,6 +72,14 @@ def run_runtime(items):
     return json.loads(run.stdout)
 
 
+WRAPPED_ROW = re.compile(r'(?<=[^\s>])(</tspan></tspan><tspan class="text-outer-tspan)')
+
+
+def spaced_rows(svg):
+    """Keep a space between wrapped label rows so text extraction doesn't join words."""
+    return WRAPPED_ROW.sub(r' \1', svg)
+
+
 def render_all(data):
     """Map each diagram id to sanitized SVG, rendering only what the cache lacks."""
     found = sources(data)
@@ -80,7 +89,7 @@ def render_all(data):
     for ident, source in found.items():
         cached = cache / f'{ident}-v{RENDER_VERSION}.svg' if cache else None
         if cached and cached.exists():
-            result[ident] = sanitize_mermaid(cached.read_text())
+            result[ident] = spaced_rows(sanitize_mermaid(cached.read_text()))
         else:
             missing.append({'id': ident, 'source': source})
     if missing:
@@ -91,7 +100,7 @@ def render_all(data):
                 start = item['source'].strip().splitlines()[0][:60]
                 raise ValueError(f'Mermaid syntax error in the diagram starting “{start}”: {output.get("error", "no output").removeprefix("page.evaluate: ")[:300]}')
             svg = sanitize_mermaid(output['svg'])
-            result[item['id']] = svg
+            result[item['id']] = spaced_rows(svg)
             if cache:
                 try:
                     (cache / f'{item["id"]}-v{RENDER_VERSION}.svg').write_text(svg)

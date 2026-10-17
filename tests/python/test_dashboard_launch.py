@@ -158,6 +158,19 @@ class DashboardLaunch(unittest.TestCase):
                 runtime.start_launch(URL,'review',retry=True,guidance='x'*(runtime.GUIDANCE_LIMIT+1))
         finally:fixture.tearDown()
 
+    def test_deep_explanation_is_added_to_the_recorded_guidance(self):
+        from test_dashboard import Isolated, URL
+        import dashboard_runtime as runtime
+        fixture=Isolated();fixture.setUp()
+        try:
+            for guidance,expected in (('',runtime.DEEP_EXPLANATION),('Docs only.','Docs only.\n'+runtime.DEEP_EXPLANATION)):
+                with patch.object(runtime.reviews,'start') as launch:
+                    runtime.start_launch(URL,'review',retry=True,guidance=guidance,deep_explanation=True)
+                run_id,prompt,_=launch.call_args.args
+                self.assertIn('<<<\n'+expected+'\n>>>',prompt)
+                self.assertEqual(json.loads(runtime.launch_path(run_id).read_text())['guidance'],expected)
+        finally:fixture.tearDown()
+
 
 if __name__ == '__main__':
     unittest.main()

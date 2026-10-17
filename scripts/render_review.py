@@ -8,6 +8,7 @@ import itertools
 from html.parser import HTMLParser
 import json
 import math
+import os
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
@@ -113,7 +114,7 @@ def review_markdown(text, data):
     def visual(key):
         value = data.get('review', {}).get('visuals', {}).get(key)
         if not isinstance(value, dict) or value.get('type') not in VISUAL_TYPES:
-            raise ValueError('Review visual must reference a defined diagram, cases, table, flow, sequence or scenario')
+            raise ValueError('Review visual must reference a defined diagram, cases, table, flow, sequence, scenario or stepper')
         return blocks([value], data)
     return render_markdown(text, inline, esc, visual=visual, footer=comment_footer(data))
 
@@ -125,6 +126,38 @@ def source_path(value):
     if p.is_absolute() or '..' in p.parts or not value or any(ord(c) < 32 for c in value):
         raise ValueError('Source paths must be repository-relative')
     return value
+
+def preflight_blobs(data):
+    """Avoid lazy network fetches and opaque Git errors for offline excerpt clones."""
+    repository = data['repository']
+    config = subprocess.run(['git', '-C', repository, 'config', '--get-regexp',
+                             r'remote\..*\.partialclonefilter'], capture_output=True, text=True)
+    if not any(line.endswith(' blob:none') for line in config.stdout.splitlines()): return
+    paths = set()
+    def visit(value):
+        if isinstance(value, dict):
+            if value.get('type') == 'source': paths.add(source_path(value['path']))
+            for child in value.values(): visit(child)
+        elif isinstance(value, list):
+            for child in value: visit(child)
+    visit(data.get('sections', [])); visit(data.get('review', {}).get('visuals', {}))
+    for revision in (data['base'], data['head']):
+        if revision == 'working-tree': continue
+        for path in sorted(paths):
+            oid = subprocess.run(['git', '-C', repository, 'rev-parse', f'{revision}:{path}'],
+                                 capture_output=True, text=True, env={**os.environ, 'GIT_NO_LAZY_FETCH': '1'})
+            if oid.returncode: continue  # A genuinely absent path retains its normal error.
+            blob = subprocess.run(['git', '-C', repository, 'cat-file', '-e', oid.stdout.strip()],
+                                  capture_output=True, env={**os.environ, 'GIT_NO_LAZY_FETCH': '1'})
+            if blob.returncode:
+                raise ValueError('repository is a blobless partial clone; point at a full or --shared clone')
+
+def file_status(data, path):
+    args = ['diff', '--no-ext-diff', '--no-renames', '--name-status', data['base']]
+    if data['head'] != 'working-tree':
+        args.append(data['head'])
+    status = git(Path(data['repository']), *args, '--', path).split('\t', 1)[0][:1]
+    return {'A': 'new', 'D': 'removed', '': 'unchanged'}.get(status, 'changed')
 
 def line_changes(repository, base, head, path, side):
     args = ['diff', '--no-ext-diff', '--no-textconv', '--unified=0', base]
@@ -198,15 +231,15 @@ ICONS = {
     'network': '<path d="M9 25h15a6 6 0 0 0 1-12 9 9 0 0 0-17-2 7 7 0 0 0 1 14"/>',
 }
 
-VISUAL_TYPES = {'diagram', 'cases', 'table', 'flow', 'sequence', 'scenario', 'mermaid', 'compare', 'callouts'}
-CASE_MARKS = {'works': ('✅', 'Works'), 'breaks': ('❌', 'Breaks'), 'changes': ('⚠️', 'Changes'), 'same': ('', ''), 'unknown': ('❔', 'Not established')}
+VISUAL_TYPES = {'diagram', 'cases', 'table', 'flow', 'sequence', 'scenario', 'mermaid', 'compare', 'callouts', 'stepper'}
+CASE_MARKS = {'works': ('✅', 'Works'), 'breaks': ('❌', 'Breaks'), 'changes': ('⚠️', 'Changes'), 'same': ('', ''), 'unknown': ('❔', 'Not established'), 'absent': ('—', 'Not available')}
 
 def diagram(block):
     title = f'<figcaption class="diagram-title">{esc(block["title"])}</figcaption>' if block.get('title') else ''
     return (f'<figure class="diagram">{title}<div class="diagram-body">{sanitize_diagram(block["html"])}</div>'
             f'<p class="caption">{esc(block["caption"])}</p></figure>')
 
-def cases(block):
+def cases(block, paper=False):
     columns = block['columns']
     if not 2 <= len(columns) <= 5:
         raise ValueError('A cases grid needs a situation column and one to four outcome columns')
@@ -220,13 +253,14 @@ def cases(block):
             raise ValueError('Each cases row needs one cell per outcome column')
         badge = f' <span class="case-finding">⚠ {esc(row["finding"])}</span>' if row.get('finding') else ''
         out = [f'<th scope="row">{esc(row["situation"])}{badge}</th>']
-        for cell in cells:
+        for index, cell in enumerate(cells, 1):
             status = cell.get('status', 'same')
             if status not in CASE_MARKS:
-                raise ValueError('Cases status must be works, breaks, changes, same or unknown')
+                raise ValueError('Cases status must be works, breaks, changes, same, unknown or absent')
             mark, word = CASE_MARKS[status]
-            prefix = f'<span class="case-mark" aria-hidden="true">{mark}</span><span class="visually-hidden">{word}: </span>' if mark else ''
-            out.append(f'<td class="case-{status}">{prefix}{esc(cell["text"])}</td>')
+            prefix = (f'<span class="case-status">{word}</span>: ' if status == 'absent' else f'<span class="case-mark" aria-hidden="true">{mark}</span><span class="visually-hidden">{word}: </span>' if mark else '')
+            label = f' data-label="{esc(columns[index])}"' if paper else ''
+            out.append(f'<td class="case-{status}"{label}>{prefix}{esc(cell["text"])}</td>')
         body.append('<tr>' + ''.join(out) + '</tr>')
     headers = ''.join(f'<th scope="col">{esc(x)}</th>' for x in columns)
     title = f'<figcaption class="diagram-title">{esc(block["title"])}</figcaption>' if block.get('title') else ''
@@ -324,6 +358,361 @@ def pair(block, data):
     return (f'<div class="walk-pair"><div class="walk-pane"><p class="walk-eyebrow">{esc(block.get("label", "Logical change"))}</p><div class="walk-stack">{left}</div></div>'
             f'<div class="walk-pane"><p class="walk-eyebrow">Important diff</p><div class="walk-stack">{blocks(block["diff"], data)}</div></div></div>')
 
+def text_field(value, label, words=None, sentences=None):
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f'{label} must be non-empty text')
+    if words and len(value.split()) > words:
+        raise ValueError(f'{label} must be at most {words} words')
+    if sentences and len(re.split(r'(?<=[.!?])\s+', value.strip())) > sentences:
+        raise ValueError(f'{label} must be at most {sentences} sentence(s)')
+    return value
+
+
+def object_fields(value, allowed, label):
+    if not isinstance(value, dict) or set(value) - set(allowed.split()):
+        raise ValueError(f'{label} must be an object with fields: {allowed}')
+
+
+def finding_number(value, count):
+    if not isinstance(value, str) or not re.fullmatch(r'(?:Finding |finding-)[1-9][0-9]*', value):
+        raise ValueError('finding must name Finding N or finding-N')
+    number = int(re.search(r'[0-9]+$', value)[0])
+    if number > count:
+        raise ValueError('finding must reference an existing finding')
+    return number
+
+
+def code_walk(block, data):
+    object_fields(block, 'type example items', 'code_walk')
+    items = block.get('items')
+    if not isinstance(items, list) or not 2 <= len(items) <= 6:
+        raise ValueError('A code_walk needs two to six items')
+    example = f'<p>{esc(text_field(block["example"], "code_walk example"))}</p>' if 'example' in block else ''
+    rows = []
+    for item in items:
+        object_fields(item, 'path tag text diff', 'code_walk item')
+        path = source_path(text_field(item.get('path'), 'code_walk path'))
+        if 'tag' in item and (not isinstance(item['tag'], str) or item['tag'] not in {'new', 'changed', 'removed', 'unchanged'}):
+            raise ValueError('code_walk tag must be new, changed, removed or unchanged')
+        # Git decides the badge, so a context file is never shown as changed.
+        tag = file_status(data, path)
+        text_field(unnumbered(item.get('text')), 'code_walk text', sentences=1)
+        diff = item.get('diff')
+        if not isinstance(diff, list) or not diff or any(not isinstance(b, dict) or not isinstance(b.get('type'), str) or b['type'] not in {'source', 'example'} for b in diff):
+            raise ValueError('code_walk diff needs source or example blocks')
+        seen_paths = {path}
+        excerpts = []
+        for excerpt in diff:
+            if 'open' in excerpt and not isinstance(excerpt['open'], bool):
+                raise ValueError('code_walk excerpt open must be true or false')
+            markup = blocks([excerpt], data)
+            if excerpt['type'] == 'source':
+                excerpt_path = excerpt['path']
+                if excerpt_path in seen_paths:
+                    markup = markup.replace(f'<span class="path">{esc(excerpt_path)}</span>', '', 1)
+                seen_paths.add(excerpt_path)
+            excerpts.append(markup)
+        # The first source and preceding examples stay inline.
+        inline_count = 1 + next((i for i, b in enumerate(diff) if b['type'] == 'source'), 0)
+        inline = ''.join(excerpts[:inline_count])
+        hidden = excerpts[inline_count:]
+        if data.get('layout') == 'paper' and any('open' in b for b in diff):
+            chosen = [i for i, b in enumerate(diff) if b.get('open', i < inline_count)]
+            inline = ''.join(excerpts[i] for i in chosen)
+            hidden = [markup for i, markup in enumerate(excerpts) if i not in chosen]
+            if not chosen: raise ValueError('code_walk needs at least one open excerpt')
+            sources = [i for i, b in enumerate(diff) if b['type'] == 'source']
+            if (len(sources) == 2 and all(i in chosen for i in sources)
+                    and {diff[i].get('side', 'head') for i in sources} == {'base', 'head'}):
+                pair = f'<div class="paper-excerpt-pair">{"".join(excerpts[i] for i in sources)}</div>'
+                inline = ''.join(pair if i == sources[0] else excerpts[i] for i in chosen if i not in sources[1:])
+        extra = f'<details><summary>More excerpts</summary>{"".join(hidden)}</details>' if hidden else ''
+        rows.append(f'<li><p><span class="code-walk-chip"><code>{esc(path)}</code> <span class="code-walk-tag">{esc(tag)}</span></span> {esc(item["text"])}</p>'
+                    f'{inline}{extra}</li>')
+    return f'<div class="code-walk">{example}<ol>{"".join(rows)}</ol></div>'
+
+
+class StepperElements(HTMLParser):
+    """Read stable hooks from sanitized markup, without changing the allowlist."""
+    def __init__(self, markup):
+        super().__init__()
+        self.elements = []
+        self.definitions = 0
+        self.feed(markup)
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {'defs', 'marker'}: self.definitions += 1
+        if not self.definitions: self.elements.append((tag, dict(attrs)))
+
+    def handle_endtag(self, tag):
+        if tag in {'defs', 'marker'}: self.definitions -= 1
+
+
+def unnumbered(value):
+    if isinstance(value, str) and re.match(r'^\s*\d+\.\s+', value):
+        raise ValueError('List item text must not start with a number such as "1. "; the renderer supplies numbering')
+    return value
+
+
+def stepper(block, data):
+    object_fields(block, 'type title caption visual steps', 'stepper')
+    title = text_field(block.get('title'), 'stepper title')
+    caption = text_field(block.get('caption'), 'stepper caption')
+    visual = block.get('visual')
+    if not isinstance(visual, dict) or not isinstance(visual.get('type'), str) or visual['type'] not in {'flow', 'sequence', 'mermaid', 'diagram'}:
+        raise ValueError('stepper visual must be mermaid, diagram, flow or sequence')
+    kind = visual['type']
+    if kind == 'diagram':
+        text_field(visual.get('html'), 'stepper diagram html')
+        text_field(visual.get('caption'), 'stepper diagram caption')
+    targets = []
+    edge_ends = {}
+    if kind in {'flow', 'sequence'}:
+        visual_steps = visual.get('steps')
+        if not isinstance(visual_steps, list) or not visual_steps:
+            raise ValueError('stepper visual needs steps')
+        for field in ('title', 'caption'):
+            text_field(visual.get(field), f'stepper visual {field}')
+        for item in visual_steps:
+            fields = 'label detail icon state' if kind == 'flow' else 'from to message state'
+            object_fields(item, fields, 'stepper visual step')
+            required = ('label', 'detail') if kind == 'flow' else ('from', 'to', 'message')
+            for field in required: unnumbered(text_field(item.get(field), f'stepper visual {field}'))
+            states = {'normal', 'active', 'muted', 'blocked'} if kind == 'flow' else {'normal', 'blocked'}
+            if not isinstance(item.get('state', 'normal'), str) or item.get('state', 'normal') not in states:
+                raise ValueError('Unsupported stepper visual state')
+            if 'icon' in item and (not isinstance(item['icon'], str) or item['icon'] not in ICONS):
+                raise ValueError('Unsupported stepper visual icon')
+        targets = list(range(1, len(visual_steps) + 1))
+    elif kind == 'mermaid':
+        source = text_field(visual.get('source'), 'stepper Mermaid source').strip()
+        if source.startswith('sequenceDiagram'):
+            kind = 'mermaid-sequence'
+        elif source.startswith(('flowchart', 'graph')):
+            kind = 'mermaid-flowchart'
+        else:
+            raise ValueError('stepper Mermaid must be a sequenceDiagram or flowchart')
+    visual_html = blocks([visual], data)
+    elements = StepperElements(visual_html).elements
+    if kind == 'mermaid-sequence':
+        targets = list(range(1, 1 + sum(attrs.get('data-et') == 'message' for _, attrs in elements)))
+    elif kind == 'mermaid-flowchart':
+        for _, attrs in elements:
+            if 'node' in attrs.get('class', '').split():
+                match = re.search(r'-flowchart-(.+)-[0-9]+$', attrs.get('id', ''))
+                if not match: raise ValueError('stepper Mermaid node has no stable source id')
+                targets.append(match[1])
+        # Named Mermaid edges omit endpoints from data-id. Read their authored endpoints.
+        node = '(?:' + '|'.join(re.escape(key) for key in sorted(targets, key=len, reverse=True)) + ')'
+        shape = r'(?:\[[^\n]*?\]|\([^\n]*?\)|\{[^\n]*?\})?'
+        named_edge = re.compile(r'(?<![\w-])(' + node + r')\s*' + shape + r'\s+([\w-]+)@[-=.ox<>]+(?:\|[^|]*\|)?\s*(' + node + r')(?![\w-])')
+        edge_ends = {match[2]: [match[1], match[3]] for match in named_edge.finditer(source)}
+    elif kind == 'diagram':
+        targets = [attrs['id'] for _, attrs in elements if attrs.get('id', '').startswith('dg-')]
+    if not targets or len(set(targets)) != len(targets):
+        raise ValueError('stepper visual needs unique drawable targets (diagram ids must exist outside defs/markers)')
+    steps = block.get('steps')
+    if not isinstance(steps, list) or not 2 <= len(steps) <= 8:
+        raise ValueError('A stepper needs two to eight steps')
+    rows = []
+    count = len(review_verdict.findings(data['review']['markdown']))
+    for index, step in enumerate(steps):
+        object_fields(step, 'label text focus finding', 'stepper step')
+        label = unnumbered(text_field(step.get('label'), 'stepper label'))
+        text = text_field(unnumbered(step.get('text')), 'stepper text', sentences=1)
+        focus = step.get('focus', [targets[index]] if index < len(targets) else [])
+        if (not isinstance(focus, list) or not focus or
+                any(type(key) is not type(targets[0]) or key not in targets for key in focus) or
+                len(set(focus)) != len(focus)):
+            expected = 'unique 1-based message/step indices in range' if isinstance(targets[0], int) else 'unique ids present in the Mermaid source or diagram markup'
+            raise ValueError(f'stepper step {index + 1} focus needs {expected}; available targets: {targets}')
+        badge = ''
+        if 'finding' in step:
+            number = finding_number(step['finding'], count)
+            badge = f' <a class="walk-finding" href="#finding-{number}" data-open-finding>⚠ Finding {number}</a>'
+        rows.append(f'<li data-focus="{esc(json.dumps(focus))}"><button type="button" class="stepper-note" aria-pressed="false"><strong>{esc(label)}</strong><span>{esc(text)}</span></button>{badge}</li>')
+    return (f'<div class="stepper" role="group" aria-label="{esc(title)}" data-visual="{kind}" data-targets="{esc(json.dumps(targets))}" data-edges="{esc(json.dumps(edge_ends))}"><h3>{esc(title)}</h3>'
+            f'<div class="stepper-body"><div class="stepper-visual">{visual_html}<p class="caption">{esc(caption)}</p></div>'
+            f'<ol class="stepper-texts">{"".join(rows)}</ol></div></div>')
+
+
+PAPER_KINDS = {'docs', 'config', 'ci', 'deps', 'logic', 'lifecycle', 'data', 'ui', 'refactor', 'api', 'test'}
+
+
+def source_chip(value):
+    object_fields(value, 'label url', 'source')
+    label = text_field(value.get('label'), 'source label')
+    content = anchor(label, text_field(value['url'], 'source URL')) if 'url' in value else esc(label)
+    return f'<span class="paper-source-chip">{content}</span>'
+
+
+def paper_why(value):
+    object_fields(value, 'text sources inferred', 'why')
+    text = text_field(value.get('text'), 'why text', sentences=2, words=45)
+    if not isinstance(value.get('inferred'), bool): raise ValueError('why inferred must be true or false')
+    sources = value.get('sources', [])
+    if not isinstance(sources, list) or (not sources and not value['inferred']):
+        raise ValueError('why requires at least one source unless inferred')
+    chips = ''.join(source_chip(source) for source in sources)
+    if value['inferred']: chips += '<span class="paper-source-chip">inferred from the diff</span>'
+    return f'<div class="paper-why"><h2>Why this PR exists</h2><p>{esc(text)}</p><div class="paper-source-chips" data-exclude-count>{chips}</div></div>'
+
+
+def paper_orientation(value):
+    object_fields(value, 'open teaser map story terms compare', 'orientation')
+    if not isinstance(value.get('open'), bool): raise ValueError('orientation open must be true or false')
+    teaser = text_field(value.get('teaser'), 'orientation teaser', words=12)
+    prose = [teaser]; content = ''
+    if 'map' in value:
+        items = value['map']
+        if not isinstance(items, list) or not 3 <= len(items) <= 6:
+            raise ValueError('orientation map needs three to six items')
+        boxes = []; changed = False
+        for item in items:
+            object_fields(item, 'label name changed', 'orientation map item')
+            label = text_field(item.get('label'), 'orientation map label')
+            if not isinstance(item.get('changed'), bool): raise ValueError('orientation changed must be true or false')
+            changed |= item['changed']; prose.append(label)
+            name = ''
+            if 'name' in item:
+                ident = text_field(item['name'], 'orientation map name')
+                if re.search(r'\s', ident): raise ValueError('orientation map name must be an identifier without spaces')
+                prose.append(ident); name = f'<code>{esc(ident)}</code>'
+            badge = '<small data-exclude-count>this PR</small>' if item['changed'] else ''
+            boxes.append(f'<li class="{"changed" if item["changed"] else "unchanged"}"><span>{esc(label)}</span>{name}{badge}</li>')
+        if not changed: raise ValueError('orientation map needs at least one changed item')
+        content += f'<ol class="paper-system-map" aria-label="You are here">{"".join(boxes)}</ol>'
+    if 'story' in value:
+        story = text_field(value['story'], 'orientation story', sentences=3); prose.append(story)
+        content += f'<p>{esc(story)}</p>'
+    if 'map' not in value and 'story' not in value: raise ValueError('orientation requires map or story')
+    if 'compare' in value:
+        compare = text_field(value['compare'], 'orientation compare', sentences=1); prose.append(compare)
+        content += f'<p class="paper-compare">{esc(compare)}</p>'
+    terms = value.get('terms', [])
+    if not isinstance(terms, list) or len(terms) > 4: raise ValueError('orientation terms needs zero to four terms')
+    definitions = []
+    for term in terms:
+        object_fields(term, 'term meaning', 'orientation term')
+        name = text_field(term.get('term'), 'orientation term'); meaning = text_field(term.get('meaning'), 'orientation meaning')
+        prose.extend([name, meaning]); definitions.append(f'<dt>{esc(name)}</dt><dd>{esc(meaning)}</dd>')
+    if definitions: content += f'<dl>{"".join(definitions)}</dl>'
+    text_field(' '.join(prose), 'orientation', words=120)
+    opened = ' open' if value['open'] else ''
+    return f'<details class="paper-orientation paper-background"{opened}><summary><strong>Background</strong> <span>{esc(teaser)}</span></summary>{content}</details>'
+
+
+def paper_approach(value):
+    object_fields(value, 'text source suggested', 'approach')
+    text = text_field(value.get('text'), 'approach text', sentences=2)
+    if 'suggested' in value and not isinstance(value['suggested'], bool): raise ValueError('approach suggested must be true or false')
+    if value.get('suggested'):
+        if 'source' in value: raise ValueError('approach uses source or suggested, not both')
+        chip = '<span class="paper-source-chip">our note, not stated by the author</span>'
+    else:
+        if 'source' not in value: raise ValueError('approach requires source or suggested true')
+        chip = source_chip(value['source'])
+    return f'<aside class="paper-approach"><h3>Approach</h3><p>{esc(text)}</p><div data-exclude-count>{chip}</div></aside>'
+
+
+def paper_layers(data):
+    text_field(data.get('title'), 'paper title', words=12)
+    text_field(data.get('outcome'), 'paper outcome')
+    glance = data.get('glance')
+    object_fields(glance, 'kind kind_label blast blast_reason findings judgment', 'glance')
+    if not isinstance(glance.get('kind'), str) or glance['kind'] not in PAPER_KINDS:
+        raise ValueError('Unsupported glance kind')
+    if not isinstance(glance.get('blast'), str) or glance['blast'] not in {'contained', 'moderate', 'wide'}:
+        raise ValueError('glance blast must be contained, moderate or wide')
+    reason = text_field(glance.get('blast_reason'), 'glance blast_reason', words=12)
+    label = text_field(glance['kind_label'], 'glance kind_label', words=6) if 'kind_label' in glance else glance['kind']
+    findings = review_verdict.findings(data['review']['markdown'])
+    # Parse the rendered Markdown, so fenced examples cannot create false findings.
+    class Problems(HTMLParser):
+        def __init__(self):
+            super().__init__(); self.index = -1; self.depth = 0; self.parts = {}; self.in_paragraph = False; self.paragraph = []
+        def handle_starttag(self, tag, attrs):
+            if tag == 'details':
+                self.depth += 1
+                if dict(attrs).get('class') == 'review-finding': self.index += 1
+            if tag == 'p': self.in_paragraph = True; self.paragraph = []
+        def handle_data(self, value):
+            if self.in_paragraph: self.paragraph.append(value)
+        def handle_endtag(self, tag):
+            if tag == 'p':
+                text = ''.join(self.paragraph)
+                match = re.match(r'The problem in one sentence:\s*(.+)', text, re.I | re.S)
+                if match and self.depth and self.index not in self.parts: self.parts[self.index] = match[1].strip()
+                self.in_paragraph = False
+            if tag == 'details': self.depth -= 1
+    problems = Problems(); problems.feed(review_markdown(data['review']['markdown'], data))
+    lines = [{'text': problems.parts.get(i) or f['title'], 'finding': f'Finding {i+1}'} for i, f in enumerate(findings)]
+    if 'findings' in glance:
+        lines = glance['findings']
+        if not isinstance(lines, list): raise ValueError('glance findings must be a list')
+    rendered = []
+    for line in lines:
+        object_fields(line, 'text finding', 'glance finding')
+        text_field(line.get('text'), 'glance finding text', sentences=1)
+        number = finding_number(line.get('finding'), len(findings))
+        rendered.append(f'<li><a href="#finding-{number}" data-open-finding>{esc(line["text"])}</a></li>')
+    remaining = len(findings) - len({line['finding'].replace('Finding ', '').replace('finding-', '') for line in lines[:2]})
+    more = f'<a href="#review-findings">+{remaining} more</a>' if remaining > 0 else ''
+    gaps = review_verdict.derive(data['review'])['gaps']
+    no_findings = 'No findings' + (f' · {len(gaps)} coverage gap{"" if len(gaps)==1 else "s"}' if gaps else '')
+    finding_text = f'<strong>{len(findings)} finding{"" if len(findings)==1 else "s"}</strong><ul>{"".join(rendered[:2])}</ul>{more}' if findings else f'<strong>{no_findings}</strong>'
+    judgment = glance.get('judgment', [])
+    if not isinstance(judgment, list) or len(judgment) > 3: raise ValueError('glance judgment needs zero to three items')
+    questions = []
+    for item in judgment:
+        object_fields(item, 'text section', 'glance judgment')
+        text = esc(text_field(item.get('text'), 'glance judgment text', sentences=1))
+        if 'section' in item:
+            ident = item['section']
+            if not isinstance(ident, str) or ident not in {section['id'] for section in data.get('sections', [])}:
+                raise ValueError('judgment section must reference a paper section')
+            text = f'<a href="#{esc(ident)}">{text}</a>'
+        questions.append(f'<li>{text}</li>')
+    judgment_html = f'<aside class="paper-judgment"><h3>Needs your judgment</h3><ul>{"".join(questions)}</ul></aside>' if questions else ''
+    result = (f'<section class="paper-glance" aria-label="At a glance"><h2>At a glance</h2><div class="paper-tiles">'
+              f'<div><h3>Kind of change</h3><strong>{esc(label)}</strong></div><div><h3>Blast radius</h3><strong>{esc(glance["blast"])}</strong><p>{esc(reason)}</p></div>'
+              f'<div class="paper-findings{" paper-findings-long" if rendered else ""}"><h3>Findings</h3>{finding_text}</div></div>{judgment_html}</section>')
+    # Derive jump destinations from actual content, including nonstandard section ids.
+    targets = {}
+    def has_code(value):
+        if isinstance(value, dict): return value.get('type') in {'source', 'code_walk'} or any(has_code(v) for v in value.values())
+        return isinstance(value, list) and any(has_code(v) for v in value)
+    for section in data.get('sections', []):
+        if section['id'] in {'change', 'the-change'}: targets.setdefault('The change', section['id'])
+        if has_code(section['blocks']): targets.setdefault('Code', section['id'])
+        if section['id'] in {'blast', 'blast-radius'} or 'blast radius' in section['title'].lower(): targets.setdefault('Blast radius', section['id'])
+    if 'The change' not in targets:
+        candidate = next((s for s in data.get('sections', []) if s['id'] not in targets.values()), None)
+        if candidate: targets['The change'] = candidate['id']
+    links = [f'<a href="#{esc(targets[label])}">{label}</a>' for label in ('The change', 'Code', 'Blast radius') if label in targets]
+    links.append(f'<a href="#review-findings">Findings ({len(findings)})</a>')
+    separator = '<span aria-hidden="true"> · </span>'
+    result += f'<nav class="paper-jumps" aria-label="Jump to">{separator.join(links)}</nav>'
+    if 'orientation' in data and 'background' in data: raise ValueError('Use orientation or background, not both')
+    if 'orientation' in data: result += paper_orientation(data['orientation'])
+    if 'background' in data:
+        background = data['background']
+        object_fields(background, 'story terms', 'background')
+        story = text_field(background.get('story'), 'background story', sentences=3)
+        terms = background.get('terms')
+        if not isinstance(terms, list) or not 1 <= len(terms) <= 5:
+            raise ValueError('background terms needs one to five terms')
+        definitions = []; prose = [story]
+        for term in terms:
+            object_fields(term, 'term meaning', 'background term')
+            name = text_field(term.get('term'), 'background term')
+            meaning = text_field(term.get('meaning'), 'background meaning')
+            prose.extend([name, meaning]); definitions.append(f'<dt>{esc(name)}</dt><dd>{esc(meaning)}</dd>')
+        text_field(' '.join(prose), 'background', words=100)
+        result += f'<section class="paper-background" data-section="Before you read"><h2>Before you read</h2><p>{esc(story)}</p><dl>{"".join(definitions)}</dl></section>'
+    return result
+
+
 def blocks(items, data):
     output = []
     for block in items:
@@ -331,11 +720,11 @@ def blocks(items, data):
         if kind == 'paragraph':
             output.append(f'<p>{esc(block["text"])}</p>')
         elif kind == 'list':
-            output.append('<ul>' + ''.join(f'<li>{esc(x)}</li>' for x in block['items']) + '</ul>')
+            output.append('<ul>' + ''.join(f'<li>{esc(unnumbered(x))}</li>' for x in block['items']) + '</ul>')
         elif kind == 'comparison':
             lanes = []
             for lane in block['lanes']:
-                steps = ''.join(f'<li class="step">{esc(x)}</li>' for x in lane['steps'])
+                steps = ''.join(f'<li class="step">{esc(unnumbered(x))}</li>' for x in lane['steps'])
                 lanes.append(f'<div class="lane"><h3>{esc(lane["title"])}</h3><ol>{steps}</ol></div>')
             output.append(f'<div class="comparison">{"".join(lanes)}</div>')
             if block.get('caption'): output.append(f'<p class="caption">{esc(block["caption"])}</p>')
@@ -352,10 +741,12 @@ def blocks(items, data):
         elif kind == 'diagram':
             output.append(diagram(block))
         elif kind == 'cases':
-            output.append(cases(block))
+            output.append(cases(block, data.get('layout') == 'paper'))
         elif kind == 'flow':
             steps = []
             for number, step in enumerate(block['steps'], 1):
+                for field in ('label', 'detail'):
+                    if field in step: unnumbered(step[field])
                 state = step.get('state', 'normal')
                 if state not in {'normal', 'active', 'muted', 'blocked'}:
                     raise ValueError('Unsupported flow state')
@@ -368,6 +759,8 @@ def blocks(items, data):
         elif kind == 'sequence':
             steps = []
             for step in block['steps']:
+                for field in ('from', 'to', 'message'):
+                    if field in step: unnumbered(step[field])
                 state = step.get('state', 'normal')
                 if state not in {'normal', 'blocked'}:
                     raise ValueError('Unsupported sequence state')
@@ -394,6 +787,10 @@ def blocks(items, data):
             output.append(compare(block, data))
         elif kind == 'pair':
             output.append(pair(block, data))
+        elif kind == 'code_walk':
+            output.append(code_walk(block, data))
+        elif kind == 'stepper':
+            output.append(stepper(block, data))
         else: raise ValueError(f'Unsupported block type: {kind}')
     return ''.join(output)
 
@@ -462,7 +859,8 @@ def render(data):
     if data.get('pr_url') and not re.fullmatch(re.escape(data.get('repo_url','')) + r'/pull/[1-9]\d*',data['pr_url']):
         raise ValueError('PR URL must belong to the verified repository')
     layout=data.get('layout','classic')
-    if layout not in {'classic','walk'}: raise ValueError('layout must be classic or walk')
+    if layout not in {'classic','walk','paper'}: raise ValueError('layout must be classic, walk or paper')
+    preflight_blobs(data)
     data={**data,'_mermaid':review_mermaid.render_all(data)}
     mode=data.get('mode','Brief · Standard')
     if mode not in {'Brief · Small','Brief · Standard','Deep'}: raise ValueError('Unknown mode')
@@ -492,7 +890,7 @@ def render(data):
         if 'assessment' not in review: raise ValueError('A verdict needs review.assessment')
         resolved=[f['title'] for f in (update or {}).get('findings', []) if f['status']=='resolved']
         assessment = review_verdict.render(review, assessment_html, review_inline(data), esc, data['head'],
-                                           previous_verdict(update), resolved)
+                                           previous_verdict(update), resolved, paper=layout=='paper')
     sections=[]; nav=[]; seen=set()
     # A walk reads the change first; the update record follows the findings there.
     if update and layout=='classic':
@@ -505,18 +903,25 @@ def render(data):
         if verified!=data['head'] and (not isinstance(verified,str) or not SHA.fullmatch(verified) or not update):
             raise ValueError('A section verified at an older head needs a full SHA and an update record')
         carried=f'<p class="carried-note">Carried from the review of <code>{esc(verified[:12])}</code>, not re-derived in this update. Source excerpts show this head.</p>' if verified!=data['head'] else ''
-        if layout=='walk':
+        if layout in {'walk','paper'}:
+            if layout=='paper':
+                text_field(section.get('claim'), 'paper section claim')
+                if 'lede' in section: text_field(section['lede'], 'paper section lede')
             lede=f'<p class="walk-lede">{esc(section["lede"])}</p>' if section.get('lede') else ''
             head=f'<div class="walk-scene-head"><h2>{esc(section.get("claim") or section["title"])}</h2>{lede}</div>'
         else:
             head=f'<h2>{esc(section["title"])}</h2>'
-        sections.append(f'<section id="{ident}" data-section="{esc(section["title"])}">{head}{carried}{blocks(section["blocks"],data)}</section>')
+        body = blocks(section['blocks'], data)
+        if layout == 'paper' and 'approach' in section:
+            split = next((i for i, block in enumerate(section['blocks']) if block['type'] not in {'paragraph', 'list'}), len(section['blocks']))
+            body = blocks(section['blocks'][:split], data) + paper_approach(section['approach']) + blocks(section['blocks'][split:], data)
+        sections.append(f'<section id="{ident}" data-section="{esc(section["title"])}">{head}{carried}{body}</section>')
     # Number findings in render order so the verdict's links can open them.
     numbers=itertools.count(1)
     findings_html=re.sub(re.escape(FINDING_OPEN), lambda _: f'<details class="review-finding" id="finding-{next(numbers)}">', review_markdown(review['markdown'], data))
     sections.append('<section id="review-findings" data-section="Review findings"><h2>Review findings</h2>' + findings_html + '</section>')
     nav.append('<a href="#review-findings">Review findings</a>')
-    if update and layout=='walk':
+    if update and layout in {'walk','paper'}:
         sections.append(update_section(update,data));nav.append('<a href="#since-last-review">Since the last review</a>')
     quiz=[]; questions=data.get('questions',[])
     if len(questions) > (5 if mode=='Deep' else 3): raise ValueError('Too many self-check questions')
@@ -539,16 +944,55 @@ def render(data):
     overview=f'<h1>{esc(data["title"])}</h1><p class="outcome">{esc(data["outcome"])}</p>{assessment}<div class="actions"><span class="meta">{esc(data["stack"])} · approximately READING_MINUTES min read</span><span class="pr-link">{pr}</span></div><details class="provenance" id="provenance"><summary>Reviewed revision and context</summary><dl>{provenance}</dl></details>'
     topbar='<div class="topbar"><span class="badge">Review notes</span><button id="theme" type="button">Theme: System</button></div>'
     if layout=='walk':
+        # Only advertise the inspector when a non-stepper Mermaid has actors.
+        inspector = re.sub(r'<div class="stepper".*?<ol class="stepper-texts">.*?</ol></div></div>', '', ''.join(sections), flags=re.S)
+        inspect_hint = ' Click a diagram participant to inspect it.' if 'data-et="participant"' in inspector else ''
         content=(f'<main class="walk-page"><article class="walk"><header data-section="Overview">{topbar}{walk_heading(data)}{overview}</header>'
                  f'<div class="walk-body"><nav class="walk-rail" aria-label="Scenes"><p class="walk-eyebrow">Scenes</p><ol>{"".join(f"<li>{a}</li>" for a in nav)}</ol>'
-                 f'<p class="walk-rail-note">1–9 or ← → switch scenes. Click a diagram participant to inspect it.</p></nav>'
+                 f'<p class="walk-rail-note">1–9 or ← → switch scenes.{inspect_hint}</p></nav>'
                  f'<div class="walk-scenes">{"".join(sections)}</div></div></article></main>')
+    elif layout=='paper':
+        # Findings end the article; auxiliary material stays in a collapsed tail.
+        end = next(i for i, item in enumerate(sections) if item.startswith('<section id="review-findings"')) + 1
+        tail = ''.join(sections[end:])
+        layers = paper_layers(data)
+        why = paper_why(data['why']) if 'why' in data else ''
+        overview = (f'<h1>{esc(data["title"])}</h1>{why}{assessment}<div class="actions"><span class="pr-link">{pr}</span></div>'
+                    f'<p class="outcome">{esc(data["outcome"])}</p>')
+        content = (f'<main class="paper-page" data-kind="{esc(data["glance"]["kind"])}"><header data-section="Overview">{topbar}{walk_heading(data)}{overview}</header>'
+                   f'{layers}<div class="paper-sections">{"".join(sections[:end])}</div>'
+                   f'<details class="paper-tail"><summary>Questions, verification and sources</summary>{tail}'
+                   f'<details class="provenance" id="provenance"><summary>Reviewed revision and context</summary><dl>{provenance}</dl></details></details></main>')
     else:
         content=f'<main><header data-section="Overview">{topbar}{overview}</header><nav aria-label="On this page">{"".join(nav)}</nav>{"".join(sections)}</main>'
     words=OverviewWords().count(content)
     content=content.replace('READING_MINUTES min read',f'{max(1,math.ceil(words/180))} min overview · findings and evidence extra')
-    css=(ASSETS/'review.css').read_text()+(ASSETS/'review-walk.css').read_text();js=(ASSETS/'review.js').read_text()+(ASSETS/'review-walk.js').read_text();csp=CSP
-    if layout=='walk':
+    css=(ASSETS/'review.css').read_text();js=(ASSETS/'review.js').read_text();csp=CSP
+    js, paper_js = js.split('\n// Paper responsive diagrams', 1)
+    if 'class="stepper"' not in content and 'class="code-walk"' not in content:
+        css=css.split('\n/* Layered code walk')[0]
+    if 'class="stepper"' not in content:
+        js=js.split('\n// Reader-advanced visual steps')[0]
+    css+=(ASSETS/'review-walk.css').read_text()
+    walk_js=(ASSETS/'review-walk.js').read_text()
+    label_lines, wrapped_messages = 0, False
+    for _, attrs in StepperElements(content).elements:
+        if 'messageText' in attrs.get('class', '').split(): label_lines += 1
+        if attrs.get('data-et') == 'message':
+            wrapped_messages |= label_lines > 1
+            label_lines = 0
+    # Keep legacy report bytes stable unless a wrapped label needs the fix.
+    if wrapped_messages:
+        walk_js = walk_js.replace("const t=line.previousElementSibling;if(t?.classList.contains('messageText'))t.classList.add('dim');",
+                                  "for(let t=line.previousElementSibling;t&&!t.matches('[data-et=message]');t=t.previousElementSibling)if(t.classList.contains('messageText'))t.classList.add('dim');")
+    if 'class="stepper"' in content:
+        # The stepper owns Mermaid focus; skip the older participant click inspector.
+        walk_js=walk_js.replace("for(const figure of document.querySelectorAll('.mermaid-figure')){", "for(const figure of document.querySelectorAll('.mermaid-figure')){if(figure.closest('.stepper'))continue;")
+    js+=walk_js
+    if layout=='paper':
+        css+=(ASSETS/'review-paper.css').read_text()
+        js+='\n// Paper responsive diagrams'+paper_js
+    if layout in {'walk','paper'}:
         css=walk_fonts()+css;csp=CSP.replace("font-src 'none'","font-src data:")
     return f'<!doctype html><html lang="en" data-mode="{esc(mode)}" data-layout="{layout}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="{esc(csp)}"><title>{esc(data["title"])}</title><style>{css}</style></head><body>{content}<script>{js}</script></body></html>'
 

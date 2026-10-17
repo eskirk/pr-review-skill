@@ -80,12 +80,14 @@ const {chromium}=require(process.env.PR_REVIEW_PLAYWRIGHT_MODULE||'playwright');
   assert.equal(await page.locator('#guidance-title').textContent(),pr.title);
   await dialog.locator('[data-guidance-note]').check();
   await dialog.locator('[data-guidance-conversation]').check();
+  await dialog.getByRole('checkbox',{name:/In-depth explanation/}).check();
   await dialog.getByRole('textbox').fill('Docs only; skip tests.');
   await dialog.getByRole('textbox').press('Control+Enter');
   await card.locator('[data-action="/regenerate-review"]:disabled',{hasText:'AI review in progress'}).waitFor({state:'attached'});
   assert.equal(await card.locator('[data-review-guidance]').count(),0,'Active runs must not offer guided launches');
   assert.equal(launches.length,4);
   assert.equal(launches[3].guidance,'Docs only; skip tests.');
+  assert.equal(launches[3].deep_explanation,true);
   assert.deepEqual(launches[3].workspace_context,{notes:['note-context-1'],conversations:['11111111-1111-1111-1111-111111111111']});
   assert.equal(await dialog.evaluate(element=>element.open),false);
 

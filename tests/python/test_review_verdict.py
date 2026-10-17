@@ -69,6 +69,16 @@ class Rules(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 review_verdict.derive(review(**bad))
 
+    def test_check_scope_note_validation_and_confidence(self):
+        result=review_verdict.derive(review(tests='fail',tests_note='Reviewer probes failed; repository tests passed.'))
+        self.assertIn('Checks failed: Reviewer probes failed; repository tests passed.',result['gaps'])
+        self.assertNotIn('Tests fail at this revision.',result['gaps'])
+        self.assertEqual(review_verdict.derive(review(tests_note='Repository tests and focused probes.'))['confidence'],'high')
+        for note in (None,True,[], 'word '*16):
+            with self.subTest(note=note),self.assertRaises(ValueError):
+                review_verdict.derive(review(tests_note=note))
+        review_verdict.derive(review(tests_note='word '*15))
+
     def test_legacy_review_without_verdict_uses_severity_only(self):
         result = review_verdict.derive({'markdown': finding('P2 · Retries 4xx')})
         self.assertEqual((result['kind'], result['confidence']), ('changes', None))
@@ -94,6 +104,26 @@ class Report(unittest.TestCase):
         self.assertIn(f'<code>{self.head[:12]}</code> · 2 things to consider</span>', output)
         self.assertLess(output.index('</summary>'), output.index('Safe to approve'))
         self.assertLess(output.index('id="review-assessment"'), output.index('id="code"'))
+
+    def test_check_scope_note_is_visible_and_escaped(self):
+        output=render_review.render(self.verdict_input(tests='fail',tests_note='Only reviewer probes failed.'))
+        self.assertIn('Checks failed: Only reviewer probes failed.',output)
+        self.assertNotIn('Tests fail at this revision',output)
+        output=render_review.render(self.verdict_input(tests_note='<script>Reviewer probes</script>'))
+        self.assertIn('Tests passed · &lt;script&gt;Reviewer probes&lt;/script&gt;',output)
+        self.assertEqual(output.count('<script>'),1)
+
+    def test_paper_names_coverage_gaps_in_verdict_and_glance(self):
+        d=self.verdict_input(runtime='not-run');d['layout']='paper'
+        d['glance']={'kind':'logic','blast':'contained','blast_reason':'One counter changes.'}
+        for section in d['sections']:section['claim']=section['title']
+        output=render_review.render(d)
+        self.assertIn('2 findings · 1 coverage gap</span>',output)
+        d['review']['markdown']='No findings.'
+        output=render_review.render(d)
+        self.assertIn('No findings · 1 coverage gap</strong>',output)
+        self.assertIn(' · 1 coverage gap</span>',output)
+        self.assertNotIn('thing to consider',output)
 
     def test_consider_links_resolve_to_numbered_findings(self):
         output = render_review.render(self.verdict_input())
@@ -122,7 +152,10 @@ class Report(unittest.TestCase):
                 output = render_review.render(d)
         self.assertIn('Previous review at <code>aaaaaaaaaaaa</code>: <span class="verdict-chip tone-warn">', output)
         self.assertIn('Worth fixing first · 1 issue</span>. Fixed since: Invalid batches are retried.', output)
-        self.assertIn('· was <span class="verdict-chip tone-warn">', output[:output.index('</summary>')])
+        start = output.index('<summary class="verdict-head">')
+        summary = output[start:output.index('</summary>', start)]
+        self.assertIn('· ✓ 1 earlier issue fixed', summary)
+        self.assertNotIn('verdict-chip', summary)
 
     def test_cli_writes_and_clears_dashboard_sidecar(self):
         with tempfile.TemporaryDirectory() as directory:

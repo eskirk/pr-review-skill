@@ -402,3 +402,5 @@ progress::-webkit-progress-bar{background:var(--line);border-radius:8px}progress
 .review-cost-table td:last-child{font-weight:600}
 .review-cost p{font-size:12px;margin:0;line-height:1.5}
 @media(max-width:600px){.cost-plot{gap:2px}.cost-bar{padding:0}.cost-date:not(.cost-date-major){visibility:hidden}.cost-date-major{overflow:visible;width:0;align-self:center}.cost-day:last-child .cost-date-major{align-self:flex-end;display:flex;justify-content:flex-end}.cost-models li{grid-template-columns:minmax(0,1fr) auto 64px}.cost-share{display:none}.cost-key{margin-left:8px}.review-cost-table{font-size:12px}}
+
+.deep-explanation-option{margin:12px 0 0!important}

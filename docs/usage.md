@@ -23,6 +23,9 @@ same instructions into another agent session.
 **Run with guidance…** (in the PR actions menu and the workspace AI review tab)
 starts the same review with a short steering note, such as "Docs only; skip
 tests" or "Only iOS changed; validate on iOS". The note applies to that run only.
+Tick **In-depth explanation** for a Deep explainer of up to 3,000 words instead
+of the brief one; it adds a line to the run's guidance and leaves the review scope
+unchanged.
 
 When new commits arrive after a finished review, **Update AI review** (on the
 card and in the workspace AI review tab) builds on the previous report instead
@@ -50,13 +53,21 @@ after 30 days (`cleanupPeriodDays`).
 The agent records progress and artifacts in the local tracker. When finished,
 click **Open review** on the PR's row and select **AI review**. There is one report and one review skill:
 
-1. **Understand the change:** a walk of scenes shown one at a time (use the scene
-   list, Previous/Next, 1–9 or the arrow keys; **Show all scenes** for one long
-   page). What changed shows before and after, with Mermaid diagrams where call or
-   event order matters; why it matters walks through a concrete example and a grid
-   of situations; how it works pairs each logical change with its exact diff; the
-   blast radius separates what is affected from what is not. Finding badges mark
-   where each finding goes wrong. A short self-check tests the key distinction.
+1. **Understand the change:** one scrolling page. It opens with **Why this PR
+   exists**, the reason taken from the PR description, linked issue or commits
+   (marked *inferred from the diff* when none states it), then what is different
+   now and the condition that matters. **At a glance** gives the kind of change,
+   the blast radius, the findings and, when there is a real trade-off to weigh,
+   **Needs your judgment**. For repositories not in **Repositories I know well**,
+   an open **Background** shows where the change sits and how it worked before;
+   familiar repositories skip it. **The change** uses the visual that fits:
+   a situation grid for logic, a sequence diagram where event order matters, a
+   table for configuration, or none for docs. Numbered diagrams keep every step
+   note visible; click a note to highlight its part. **Code changes in plain
+   words** shows the key excerpts inline, badged new, changed, removed or
+   unchanged from Git, and the blast radius separates what is affected from what
+   is not. A short self-check tests the key distinction. Reports made before
+   this layout keep their scene walk.
 2. **Read the assessment and findings:** each finding starts collapsed with its
    severity and a plain-words title visible. Open it for the problem in one
    sentence, why it matters, a numbered walkthrough, whether it is real (with the
@@ -163,6 +174,14 @@ averages; weekly counts remain distinct PRs for the week.
 
 ## Personalize the installation
 
+- In **Settings → AI settings → Repositories I know well**, enter one
+  `owner/repo` per line and choose **Save all settings**. Up to 200 repositories
+  are supported; names are case-insensitive and duplicates are removed. Full
+  reviews and review updates use this list to skip familiar repository basics
+  while keeping actual code identifiers. Other repositories receive brief
+  introductions where needed. An empty list treats every repository as new.
+  Preferences apply to new work and share AI settings' save/discard and
+  stale-window protection; saved reports stay available.
 - Set `PR_REVIEW_LOCAL_DEV_ROOT` to the directory containing your existing clones.
   It defaults to `~/Development` and is used as a checkout discovery hint.
 - Optionally configure a writing-style skill for personalized comments. Dashboard AI

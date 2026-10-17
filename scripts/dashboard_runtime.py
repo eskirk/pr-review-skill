@@ -188,6 +188,7 @@ def snapshot():
 
 
 GUIDANCE_LIMIT = 2000
+DEEP_EXPLANATION = 'Write an in-depth (Deep) explanation, per references/explanation.md.'
 
 
 def review_guidance(value):
@@ -236,9 +237,12 @@ def previous_review(canonical, entry, mode):
     return prior, check
 
 
-def start_launch(url, kind, retry=False, guidance='', mode='full', workspace_context=None):
+def start_launch(url, kind, retry=False, guidance='', mode='full', workspace_context=None, deep_explanation=False):
     canonical, *_ = tracker.canonical_pr_url(url)
     guidance = review_guidance(guidance)
+    if deep_explanation:
+        # Kept in the guidance text, so the run shows what was asked for.
+        guidance = (guidance + '\n' if guidance else '') + DEEP_EXPLANATION
     if kind not in ('review', 'explainer'):
         raise dashboard.DashboardError('Unknown review action.')
     if mode not in ('full', 'update'):

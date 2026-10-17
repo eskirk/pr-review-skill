@@ -657,9 +657,11 @@ def explainer_prompt(pr_url: str) -> str:
 
 
 def full_review_prompt(pr_url: str) -> str:
+    from review_context import familiarity_prompt
     return (
         f"Follow the installed pr-review skill to fully review and explain "
         f"this pull request: {pr_url}\n\n"
+        f"{familiarity_prompt(pr_url)}\n\n"
         f"{local_checkout_hint()}\n\n"
         "Review every changed file and relevant callers/contracts. Produce one "
         "self-contained review.html: explain the change at the top, then include "
@@ -671,9 +673,11 @@ def full_review_prompt(pr_url: str) -> str:
 
 
 def update_review_prompt(pr_url: str) -> str:
+    from review_context import familiarity_prompt
     return (
         f"Follow the installed pr-review skill to update the existing AI review of "
         f"this pull request: {pr_url}\n\n"
+        f"{familiarity_prompt(pr_url)}\n\n"
         f"{local_checkout_hint()}\n\n"
         "New commits arrived after the last finished AI review. Read the skill's "
         "references/update-review.md and this run's update-context.json first. "

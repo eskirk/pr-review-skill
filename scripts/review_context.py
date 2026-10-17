@@ -122,11 +122,34 @@ on-behalf footer to every draft comment; do not write it in the drafts yourself.
 '''
 
 
+def familiarity_prompt(pr_url=''):
+    """Calibrate explanations from the same saved preferences for every provider."""
+    import ai_settings
+    familiar = False
+    if pr_url:
+        try:
+            _, owner, repository, _ = tracker.canonical_pr_url(pr_url)
+            familiar = f'{owner}/{repository}'.lower() in {
+                value.lower() for value in ai_settings.load()['known_repositories']}
+        except (tracker.TrackerError, ValueError):
+            pass
+    return ('Reader familiarity: ' + ('familiar' if familiar else 'new') + '\n'
+            'Follow references/explanation.md for how to use reader familiarity in explanations.')
+
+
 def review_prompt(run_id, prompt, job=None, style=None):
     import shlex
     cli = shlex.join([sys.executable, str(SKILL / 'scripts/pr_review_tracker.py')])
     root = tracker.tracker_root()
     style = style if style is not None else style_skill_for_job(job)
+    if not any(line in ('Reader familiarity: familiar', 'Reader familiarity: new') for line in prompt.splitlines()):
+        pr_url = (job or {}).get('pr_url', '')
+        if not pr_url:
+            try:
+                pr_url = tracker.read_json(tracker.run_dir(run_id) / 'run.json').get('pr_url', '')
+            except tracker.TrackerError:
+                pass
+        prompt += '\n\n' + familiarity_prompt(pr_url)
     return f'''{prompt}
 
 Dashboard execution context:

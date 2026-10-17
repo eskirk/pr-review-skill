@@ -67,6 +67,9 @@ def validate(value):
         items = value.get(key, [])
         if (required and not items) or not isinstance(items, list) or not all(isinstance(i, str) and i.strip() for i in items):
             raise ValueError(f'review.verdict.{key} must be a {"non-empty " if required else ""}list of text')
+    note = value.get('tests_note', '')
+    if not isinstance(note, str) or len(note.split()) > 15:
+        raise ValueError('review.verdict.tests_note must be text of at most 15 words')
     if not isinstance(value.get('runtime_note', ''), str):
         raise ValueError('review.verdict.runtime_note must be text')
     return value
@@ -104,11 +107,11 @@ def _headline(kind, items):
 def gaps(verdict):
     result = []
     if not verdict['traced']: result.append('Changed paths were read but not traced end to end.')
-    if verdict['tests'] == 'not-run': result.append('The tests were not run at this revision.')
+    if verdict['tests'] == 'not-run': result.append('The tests were not run at this revision.' + (' ' + verdict['tests_note'].strip() if verdict.get('tests_note', '').strip() else ''))
     if verdict['runtime'] == 'not-run':
         result.append(verdict.get('runtime_note') or 'The changed behavior was not exercised at runtime.')
     result += ['Not reviewed: ' + area.strip().rstrip('.') + '.' for area in verdict.get('unreviewed', [])]
-    if verdict['tests'] == 'fail': result.insert(0, 'Tests fail at this revision.')
+    if verdict['tests'] == 'fail': result.insert(0, 'Checks failed' + (': ' + verdict['tests_note'].strip() if verdict.get('tests_note', '').strip() else '.'))
     return result
 
 
@@ -142,7 +145,7 @@ def icon(tone):
     return f'<svg class="verdict-svg" viewBox="0 0 24 24" aria-hidden="true">{ICONS[tone]}</svg>'
 
 
-def render(review, assessment_html, inline, esc, head, previous=None, resolved=()):
+def render(review, assessment_html, inline, esc, head, previous=None, resolved=(), *, paper=False):
     """Verdict card HTML: one collapsed row, everything else inside it.
 
     Finding links target the ids render_review assigns.
@@ -159,16 +162,25 @@ def render(review, assessment_html, inline, esc, head, previous=None, resolved=(
         meter = f'<span class="confidence"><span class="bars" aria-hidden="true">{bars}</span>{result["confidence"].capitalize()} confidence</span>'
     revision = 'working tree' if head == 'working-tree' else f'<code>{esc(head[:12])}</code>'
     meta = [revision] + ([f'{len(consider)} thing{"" if len(consider) == 1 else "s"} to consider'] if consider else [])
+    if paper:
+        meta = [revision]
+        if result['findings']: meta.append(_plural(len(result['findings']), 'finding'))
+        if result['gaps']: meta.append(_plural(len(result['gaps']), 'coverage gap'))
     change = ''
     if previous:
         chip = f'<span class="verdict-chip tone-{previous["tone"]}">{icon(previous["tone"])}{esc(previous["headline"])}</span>'
         if previous['headline'] != result['headline']:
-            meta.append(f'was {chip}')
+            # Plain text, not a coloured chip, so the earlier verdict never reads as current.
+            if resolved:
+                meta.append(f'✓ {len(resolved)} earlier issue{"" if len(resolved) == 1 else "s"} fixed')
+            else:
+                meta.append(f'earlier review: {esc(previous["headline"])}')
         where = 'on the same commit' if previous['head'] == head else f'at <code>{esc(previous["head"][:12])}</code>'
         fixed = f' Fixed since: {"; ".join(esc(t) for t in resolved)}.' if resolved else ''
         change = f'<p class="verdict-change">Previous review {where}: {chip}.{fixed}</p>'
     listing = f'<ul>{"".join(consider)}</ul>' if consider else '<p class="verdict-muted">Nothing outstanding.</p>'
     why = ''.join(f'<li>{inline(item)}</li>' for item in verdict['why'])
+    tests_note = f'<p class="verdict-tests">Tests passed · {esc(verdict["tests_note"].strip())}</p>' if verdict['tests'] == 'pass' and verdict.get('tests_note', '').strip() else ''
     checked = ''.join(f'<li>{inline(item)}</li>' for item in verdict['checked'])
     return (f'<details class="verdict tone-{result["tone"]}" id="review-assessment">'
             f'<summary class="verdict-head"><span class="verdict-icon">{icon(result["tone"])}</span>'
@@ -178,6 +190,6 @@ def render(review, assessment_html, inline, esc, head, previous=None, resolved=(
             f'<span class="verdict-toggle" aria-hidden="true"></span></summary>'
             f'<div class="verdict-body"><div class="verdict-assessment">{assessment_html}</div>{change}'
             f'<h3>Why</h3><ul>{why}</ul><h3>{CONSIDER[result["kind"]]}</h3>{listing}'
-            f'<h3>What was checked</h3><ul class="verdict-checked">{checked}</ul>'
+            f'<h3>What was checked</h3>{tests_note}<ul class="verdict-checked">{checked}</ul>'
             f'<p class="verdict-note">Advisory, derived from the findings and checks. The approval decision is yours. '
             f'<a class="findings-link" href="#review-findings">Jump to findings and checks</a></p></div></details>')

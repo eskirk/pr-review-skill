@@ -954,6 +954,7 @@ import { installChatResize } from "./chat-resize.mjs";
     }
     if (button.id === "generate-review-guided") {
       $("guidance-text").value = "";
+      $("guidance-deep").checked = false;
       renderGuidanceSources();
       $("guidance-dialog").showModal();
       $("guidance-text").focus();
@@ -1108,7 +1109,7 @@ import { installChatResize } from "./chat-resize.mjs";
     const submit = $("guidance-form").querySelector("[type=submit]");
     submit.disabled = true;
     const context = selectedGuidanceContext();
-    const body = { guidance: $("guidance-text").value };
+    const body = { guidance: $("guidance-text").value, deep_explanation: $("guidance-deep").checked };
     if (context) body.workspace_context = context;
     if (await startReview(body)) $("guidance-dialog").close();
     submit.disabled = false;
