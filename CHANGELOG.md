@@ -4,7 +4,7 @@ Notable changes to the PR review dashboard and skill, newest first. Each pull
 request gets its own section with the day it merged; changes that went to `main`
 without a pull request are grouped by day.
 
-## #22 · Snooze in My reviews (unreleased)
+## #22 · Snooze in My reviews · 2026-10-20
 
 - **Snooze** (1 day, 3 days, 1 week) on PRs in Up next and In progress sets
   them aside in a new **Snoozed** section. They come back to you when the
