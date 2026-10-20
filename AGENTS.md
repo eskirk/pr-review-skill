@@ -11,9 +11,10 @@
 Update [CHANGELOG.md](CHANGELOG.md) in the same change whenever you add,
 change, fix or remove something a user or reviewer would notice:
 
-- Each pull request has its own section, newest first:
-  `## #21 · Short title (unreleased)`. Create it when the pull request exists;
-  when it merges, replace `(unreleased)` with `· <merge day>` (`· 2026-10-17`).
+- Each pull request has its own section, newest first: `## #23 · Short title`.
+  Create it when the pull request exists. Don't add a merge day or an
+  `(unreleased)` marker; GitHub records when the pull request merged, so
+  nothing needs updating after the merge.
 - Changes committed to `main` without a pull request go under
   `## <day> · no pull request`.
 - One plain-words line per change, describing the effect rather than the

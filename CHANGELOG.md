@@ -1,8 +1,9 @@
 # Changelog
 
 Notable changes to the PR review dashboard and skill, newest first. Each pull
-request gets its own section with the day it merged; changes that went to `main`
-without a pull request are grouped by day.
+request gets its own section, and the pull request shows when it merged. Older
+sections also carry their merge day. Changes that went to `main` without a pull
+request are grouped by day.
 
 ## #22 · Snooze in My reviews · 2026-10-20
 
