@@ -1,4 +1,4 @@
-// Exercise My reviews lanes, moves, undo, reminders, search and automatic-move notices on synthetic data.
+// Exercise My reviews lanes, moves, undo, reminders, snooze, search and automatic-move notices on synthetic data.
 'use strict';
 const {spawn}=require('node:child_process');
 const {once}=require('node:events');
@@ -25,10 +25,10 @@ const pr=number=>`https://github.com/demo/workbench/pull/${number}`;
   await card(201).waitFor();
 
   // Lanes are grouped by turn, in order, with counts and default collapse state.
-  assert.deepEqual(await page.locator('.queue-turn-title').allTextContents(),['Your turn','Their turn','Finished']);
+  assert.deepEqual(await page.locator('.queue-turn-title').allTextContents(),['Your turn','Their turn','Later','Finished']);
   assert.deepEqual(await page.locator('[data-queue-section]').evaluateAll(els=>els.map(e=>[e.dataset.queueSection,e.open,e.querySelector('.count').textContent])),
-   [['reviewing',true,'1'],['attention',true,'2'],['up_next',true,'3'],['waiting',false,'2'],['history',false,'1'],['removed',false,'1']]);
-  assert.equal(await page.locator('#queue-summary').textContent(),'6 on your turn · 2 waiting for authors');
+   [['reviewing',true,'1'],['attention',true,'2'],['up_next',true,'3'],['waiting',false,'2'],['snoozed',false,'1'],['history',false,'1'],['removed',false,'1']]);
+  assert.equal(await page.locator('#queue-summary').textContent(),'6 on your turn · 2 waiting for authors · 1 snoozed');
   // Each lane is a table; the Status column says why a PR is there and links what's new.
   assert.match(await card(202).locator('.queue-status-reasons').textContent(),/Head changed since your last check.*Author commented/);
   assert.match(await card(202).locator('.queue-status').textContent(),/You handed it back to the author 3d ago/);
@@ -81,6 +81,17 @@ const pr=number=>`https://github.com/demo/workbench/pull/${number}`;
   assert.equal(await card(207).locator('.queue-remind-set').count(),0);
   assert.equal(await card(207).locator('.queue-remind-label').textContent(),'Remind me');
 
+  // Snooze sets aside a PR on your turn; Bring back now returns it to Up next.
+  await card(205).locator('.queue-snooze > summary').click();
+  await card(205).getByRole('button',{name:'1 day',exact:true}).click();
+  await expectToast('#205 is snoozed until');
+  assert.equal(await sectionOf(205),'snoozed');
+  assert.match(await page.locator('#queue-summary').textContent(),/ · 2 snoozed$/);
+  assert.match(await card(205).locator('.queue-status').textContent(),/You snoozed it.*💤 Back/);
+  await page.locator('#queue-snoozed > summary').click();
+  await card(205).getByRole('button',{name:'Bring back now',exact:true}).click();
+  await expectToast('#205 is back in Up next.');assert.equal(await sectionOf(205),'up_next');
+
   // Stop tracking keeps the PR visible under Finished; Track again restores it.
   await card(205).locator('.pr-overflow > summary').click();
   await card(205).getByRole('button',{name:'Stop tracking',exact:true}).click();
@@ -104,6 +115,13 @@ const pr=number=>`https://github.com/demo/workbench/pull/${number}`;
   await page.route('**/api/state',route=>route.fulfill({json:snapshot}));
   await page.evaluate(()=>loadState());
   await expectToast('#207 is back to you: your reminder is due.');
+  // A woken snooze is announced and offers to continue or snooze again.
+  const woken=snapshot.prs.find(item=>item.url===pr(206));
+  woken.workflow={...woken.workflow,bucket:'attention',snoozed_until:new Date(Date.now()-60000).toISOString(),reasons:[{kind:'snooze',label:'Your snooze ended',url:pr(206)}]};
+  await page.evaluate(()=>loadState());
+  await expectToast('#206 is back to you: your snooze ended.');
+  assert.equal(await card(206).getByRole('button',{name:'Start review',exact:true}).getAttribute('class'),'button primary');
+  assert.equal(await card(206).locator('.queue-snooze .queue-remind-label').textContent(),'Snooze again');
   await page.unroute('**/api/state');await page.evaluate(()=>loadState());
 
   for(const [width,scheme] of [[390,'dark'],[1440,'light']]){
@@ -111,7 +129,7 @@ const pr=number=>`https://github.com/demo/workbench/pull/${number}`;
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`page overflow at ${width}`);
   }
   assert.deepEqual(errors,[]);
-  console.log('My reviews browser checks passed: lanes, collapse persistence, move reasons, toasts with Show/Undo, pause, reminders, stop tracking, search and automatic-move notices.');
+  console.log('My reviews browser checks passed: lanes, collapse persistence, move reasons, toasts with Show/Undo, pause, reminders, snooze, stop tracking, search and automatic-move notices.');
  } finally {
   await browser?.close();fixture.kill();
  }

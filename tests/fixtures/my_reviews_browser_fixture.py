@@ -18,6 +18,10 @@ def ago(**delta):
     return (datetime.now(timezone.utc) - timedelta(**delta)).isoformat(timespec='seconds')
 
 
+def ahead(**delta):
+    return (datetime.now(timezone.utc) + timedelta(**delta)).isoformat(timespec='seconds')
+
+
 # number, title, author, stage, moved kind, moved age, extra record fields
 PRS = [
     (201, 'Session replay masking rules', 'kim-demo', 'reviewing', 'started', {'minutes': 40},
@@ -35,6 +39,7 @@ PRS = [
     (208, 'Print friendlier auth errors', 'kim-demo', 'waiting', 'discovered', {'days': 6}, {}),
     (209, 'Add --json output flag', 'ava-demo', 'waiting', 'handed_back', {'days': 4}, {'closed': 'merged'}),
     (210, 'Experimental theming API', 'sam-demo', 'removed', 'removed', {'days': 4}, {}),
+    (211, 'Document sampling defaults', 'ava-demo', 'up_next', 'snoozed', {'hours': 3}, {'snoozed': {'days': 2}}),
 ]
 
 
@@ -58,7 +63,9 @@ def seed(queue, dashboard):
                             'checked_at': now, 'attempted_at': now, 'moved': {'kind': kind, 'at': at},
                             **({'review_observation': {'head_sha': A, 'at': at, 'event_ids': []}}
                                if stage == 'reviewing' else {}),
-                            **({'done_at': at} if stage == 'removed' else {})}
+                            **({'done_at': at} if stage == 'removed' else {}),
+                            **({'snoozed_until': ahead(**extra['snoozed']),
+                                'snooze_baseline': {'head_sha': A, 'event_ids': []}} if 'snoozed' in extra else {})}
     queue.save(data)
     dashboard.save_dashboard({'prs': {}, 'last_github_refresh_at': now})
 

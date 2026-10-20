@@ -6,13 +6,14 @@ refreshed September 25, 2026 with the renderer in the commit that added
 `review-explainer-light.jpg`. `reporting-cost-light.jpg` was added September 30,
 2026 with the commit that added AI review cost. The three `review-*` images and
 `ai-settings-light.jpg` were refreshed October 17, 2026 for the paper report
-layout and the Repositories I know well setting. Headless Chrome, light/dark system themes,
+layout and the Repositories I know well setting. `my-reviews-light.jpg` was
+refreshed October 20, 2026 for snoozing in My reviews. Headless Chrome, light/dark system themes,
 1440 × 1050 CSS-pixel viewports (1250 high for live review), JPEG quality 88.
 
 | Image | What it shows | Synthetic source |
 |---|---|---|
 | `inbox-light.jpg` | Effort estimates, My reviews actions and Open review | `workspace_browser_fixture.py`, with fictional titles and authors supplied by the capture script |
-| `my-reviews-light.jpg` | Queue grouped by turn, with update and move reasons | `my_reviews_browser_fixture.py` |
+| `my-reviews-light.jpg` | Queue grouped by turn, with update and move reasons and snooze controls | `my_reviews_browser_fixture.py` |
 | `code-workspace-light.jpg` | Pinned code diff, inline review thread and Comments rail | `workspace_integration_fixture.py` |
 | `live-review-light.jpg` | Stage progress, a question and simulated reply, wrap-up and stop controls | `codex_browser_fixture.py` |
 | `ai-settings-light.jpg` | Independent Triage, AI review and Chat profiles, and Repositories I know well | `workspace_browser_fixture.py` |

@@ -94,15 +94,16 @@ Click **Add to Up next** on a PR or paste its link into **My reviews**. The page
 groups tracked PRs by whose turn it is:
 
 - **Your turn**: **In progress** (reviews you started), **Back to you** (waiting
-  PRs with new commits, relevant replies, a review re-request or a due reminder)
-  and **Up next** (in your order).
+  or snoozed PRs with new commits, relevant replies or a review re-request, and
+  due reminders or snoozes) and **Up next** (in your order).
 - **Their turn**: **Waiting for author**.
+- **Later**: **Snoozed**.
 - **Finished**: **Merged or closed** and **Stopped tracking**.
 
 Every section collapses, shows its count and remembers its state across reloads.
-Waiting for author and Finished start collapsed. Each PR shows why it is in its
-section, such as "You handed it back to the author 3d ago" or "Added from GitHub
-because you commented or reviewed".
+Waiting for author, Snoozed and Finished start collapsed. Each PR shows why it
+is in its section, such as "You handed it back to the author 3d ago" or "Added
+from GitHub because you commented or reviewed".
 
 Buttons are named after where the PR goes:
 
@@ -114,7 +115,13 @@ Buttons are named after where the PR goes:
 | **Keep waiting** | Stays in Waiting for author; only newer updates bring it back |
 | **Mark updates seen** | Stays in progress; clears the updates shown as new |
 | **Remind me** (1 day, 3 days, 1 week) | Back to you when due, unless something else brings it back first |
+| **Snooze** (1 day, 3 days, 1 week) on Up next or In progress | Snoozed; back to you when it ends, or sooner on new commits, replies, mentions or a review re-request |
+| **Bring back now** / **Back to Up next** / **Back to In progress** | Ends a snooze and returns the PR to where it was |
 | **Stop tracking** (in •••) | Stopped tracking; **Track again** returns it to Up next |
+
+A snoozed review in progress keeps the commit it started at, so **Continue
+review** picks up where you stopped. Snoozing in My reviews is separate from
+the Inbox snooze.
 
 Each move shows a confirmation with **Show**, which opens the section and
 highlights the PR, and **Undo**. Moves made by GitHub sync, a due reminder or

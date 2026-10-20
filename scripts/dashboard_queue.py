@@ -18,10 +18,12 @@ import pr_review_tracker as tracker
 STAGES = {'up_next', 'reviewing', 'waiting', 'done', 'removed', 'history'}
 ACTIVE = {'up_next', 'reviewing', 'waiting'}
 # Stage moves record why the PR moved and can be undone from the confirmation toast.
-MOVES = {'start', 'stop', 'wait', 'acknowledge', 'remove', 'restore'}
+MOVES = {'start', 'stop', 'wait', 'acknowledge', 'remove', 'restore', 'snooze'}
 UNDO_KEYS = ('stage', 'done_at', 'review_observation', 'ack_head', 'ack_at', 'ack_event_ids',
-             'position', 'moved', 'remind_at')
+             'position', 'moved', 'remind_at', 'snoozed_until', 'snooze_baseline')
 REMIND_DAYS = {1, 3, 7}
+# Your-turn PRs can be snoozed; waiting PRs use reminders instead.
+SNOOZABLE = {'up_next', 'reviewing'}
 # Unchanged open PRs skip the detailed fetch, but each still gets one full check per hour.
 FULL_CHECK_SECONDS = 3600
 BATCH_SIZE = 25
@@ -87,6 +89,19 @@ def reminder_due(record):
     return bool(record.get('remind_at')) and epoch(record['remind_at']) <= epoch(tracker.utc_now())
 
 
+def unsnooze(record):
+    record.pop('snoozed_until', None)
+    record.pop('snooze_baseline', None)
+
+
+def days_from(now, days):
+    return (datetime.fromisoformat(now.replace('Z', '+00:00')) + timedelta(days=days)).isoformat(timespec='seconds')
+
+
+def valid_days(days):
+    return isinstance(days, int) and not isinstance(days, bool) and days in REMIND_DAYS
+
+
 def mutate(url, action, payload=None):
     payload = payload or {}
     canonical, fallback = identity(url)
@@ -112,6 +127,7 @@ def mutate(url, action, payload=None):
             record.pop('undo', None)
             record.pop('review_observation', None)
             record.pop('remind_at', None)
+            unsnooze(record)
             record['moved'] = {'kind': 'recovered' if payload.get('recover') is True else 'added', 'at': now}
             record['ack_head'] = record['metadata'].get('head_sha', '')
             if payload.get('recover') is True:
@@ -135,7 +151,7 @@ def mutate(url, action, payload=None):
                 else:
                     record[key] = value
             record.pop('undo', None)
-        elif action in ('start', 'stop', 'wait', 'acknowledge', 'remove', 'note', 'restore', 'move_up', 'remind'):
+        elif action in ('start', 'stop', 'wait', 'acknowledge', 'remove', 'note', 'restore', 'move_up', 'remind', 'snooze'):
             before = {key: copy.deepcopy(record.get(key)) for key in UNDO_KEYS}
             now = tracker.utc_now()
             if action == 'note':
@@ -148,9 +164,12 @@ def mutate(url, action, payload=None):
                 if not isinstance(observation, dict) or not observation.get('head_sha') or not epoch(observation.get('at')):
                     raise dashboard.DashboardError('Check for updates first so this review starts at a known commit.')
                 record['moved'] = {'kind': 'started' if record['stage'] == 'up_next' else 'resumed', 'at': now}
+                # Continuing a snoozed review keeps the commit it started at.
+                if record['stage'] != 'reviewing' or not record.get('review_observation'):
+                    record['review_observation'] = copy.deepcopy(observation)
                 record['stage'] = 'reviewing'
-                record['review_observation'] = copy.deepcopy(observation)
                 record.pop('remind_at', None)
+                unsnooze(record)
             elif action == 'stop':
                 if record['stage'] != 'reviewing':
                     raise dashboard.DashboardError('This PR is not currently being reviewed.')
@@ -160,12 +179,14 @@ def mutate(url, action, payload=None):
                 record['stage'] = 'up_next'
                 record['moved'] = {'kind': 'paused', 'at': now}
                 record.pop('review_observation', None)
+                unsnooze(record)
             elif action == 'wait':
                 acknowledge(record, record.get('review_observation') or payload.get('observed'))
                 record['stage'] = 'waiting'
                 record['moved'] = {'kind': 'handed_back', 'at': now}
                 record.pop('review_observation', None)
                 record.pop('remind_at', None)
+                unsnooze(record)
             elif action == 'acknowledge':
                 acknowledge(record, payload.get('observed'))
                 if record['stage'] == 'reviewing':
@@ -179,21 +200,39 @@ def mutate(url, action, payload=None):
                 record['done_at'] = now
                 record['moved'] = {'kind': 'removed', 'at': now}
                 record.pop('remind_at', None)
+                unsnooze(record)
             elif action == 'restore':
                 record['stage'] = 'up_next'
                 record['moved'] = {'kind': 'restored', 'at': now}
                 record.pop('remind_at', None)
+                unsnooze(record)
             elif action == 'remind':
                 days = payload.get('days')
                 if record['stage'] != 'waiting':
                     raise dashboard.DashboardError('Reminders are only available while waiting for the author.')
                 if days == 0:
                     record.pop('remind_at', None)
-                elif isinstance(days, int) and not isinstance(days, bool) and days in REMIND_DAYS:
-                    record['remind_at'] = (datetime.fromisoformat(now.replace('Z', '+00:00'))
-                                           + timedelta(days=days)).isoformat(timespec='seconds')
+                elif valid_days(days):
+                    record['remind_at'] = days_from(now, days)
                 else:
                     raise dashboard.DashboardError('Choose a reminder of 1, 3 or 7 days.')
+            elif action == 'snooze':
+                days = payload.get('days')
+                if record['stage'] not in SNOOZABLE:
+                    raise dashboard.DashboardError('Snooze is available in Up next and In progress. Use Remind me while waiting for the author.')
+                if days == 0:
+                    if not record.get('snoozed_until'):
+                        raise dashboard.DashboardError('This PR is not snoozed.')
+                    unsnooze(record)
+                    record['moved'] = {'kind': 'unsnoozed', 'at': now}
+                elif valid_days(days):
+                    # Activity after this point ends the snooze early.
+                    record['snoozed_until'] = days_from(now, days)
+                    record['snooze_baseline'] = {'head_sha': record.get('metadata', {}).get('head_sha', ''),
+                                                 'event_ids': [e['id'] for e in record.get('events', [])]}
+                    record['moved'] = {'kind': 'snoozed', 'at': now}
+                else:
+                    raise dashboard.DashboardError('Choose a snooze of 1, 3 or 7 days.')
             elif action == 'move_up':
                 peers = sorted(((u, r) for u, r in data['prs'].items() if r['stage'] == 'up_next'),
                                key=lambda pair: pair[1].get('position', 0))
@@ -214,6 +253,15 @@ def mutate(url, action, payload=None):
         return {'ok': True, 'revision': record['revision'], 'undo_token': record.get('undo', {}).get('token')}
 
 
+def snooze_ended(record, head, events):
+    """A snooze ends when it is due, or earlier on a new commit or new activity."""
+    baseline = record.get('snooze_baseline') or {}
+    seen = set(baseline.get('event_ids', []))
+    due = epoch(record['snoozed_until']) <= epoch(tracker.utc_now())
+    active = bool(head and baseline.get('head_sha') and head != baseline['head_sha']) or any(e['id'] not in seen for e in events)
+    return due, due or active
+
+
 def presentation(record):
     metadata = record.get('metadata', {})
     stage = 'waiting' if record['stage'] in ('done', 'history') else record['stage']
@@ -230,15 +278,20 @@ def presentation(record):
         matching = [e for e in events if e['kind'] == kind]
         if matching:
             reasons.append({'kind': kind, 'label': label, 'url': matching[-1]['url']})
+    pr_link = f"https://github.com/{metadata.get('owner')}/{metadata.get('repository')}/pull/{metadata.get('number')}"
     if stage == 'waiting' and reminder_due(record):
-        reasons.append({'kind': 'reminder', 'label': 'Your reminder is due',
-                        'url': f"https://github.com/{metadata.get('owner')}/{metadata.get('repository')}/pull/{metadata.get('number')}"})
+        reasons.append({'kind': 'reminder', 'label': 'Your reminder is due', 'url': pr_link})
+    snoozed = stage in SNOOZABLE and bool(record.get('snoozed_until'))
+    due, woken = snooze_ended(record, head, events) if snoozed else (False, False)
+    if due:
+        reasons.append({'kind': 'snooze', 'label': 'Your snooze ended', 'url': pr_link})
     if closed or stage in ('removed', 'history'):
         reasons = []
     bucket = 'history' if closed else 'removed' if stage == 'removed' else (
-        'attention' if reasons and stage == 'waiting' else stage)
+        'attention' if (reasons and stage == 'waiting') or woken else 'snoozed' if snoozed else stage)
     return {key: record.get(key) for key in ('stage', 'revision', 'note', 'created_at', 'position',
-            'checked_at', 'attempted_at', 'error', 'review_observation', 'moved', 'remind_at', 'action_at')} | {
+            'checked_at', 'attempted_at', 'error', 'review_observation', 'moved', 'remind_at',
+            'snoozed_until', 'action_at')} | {
                 'bucket': bucket, 'reasons': reasons, 'observed': observed(record), 'closed': closed,
                 'stage': stage, 'in_history': closed}
 
@@ -376,6 +429,7 @@ def apply_fetch(url, payload, started, error=None):
                               moved={'kind': 'github_review', 'at': latest['submitted_at']})
                 record.pop('review_observation', None)
                 record.pop('undo', None)
+                unsnooze(record)
         save(data)
 
 

@@ -109,6 +109,54 @@ class Queue(unittest.TestCase):
   self.action('start');self.action('wait');self.action('remind',days=7);self.action('remind',days=0)
   self.assertNotIn('remind_at',self.record())
   self.action('remind',days=3);self.action('start');self.assertNotIn('remind_at',self.record())
+ def test_snooze_sets_aside_up_next_until_due(self):
+  for days in (2,True,'3',None):
+   with self.assertRaises(dashboard.DashboardError):self.action('snooze',days=days)
+  with self.assertRaises(dashboard.DashboardError):self.action('snooze',days=0)
+  with patch.object(tracker,'utc_now',return_value=T1):result=self.action('snooze',days=1)
+  self.assertEqual(self.record()['snoozed_until'],'2026-09-02T11:00:00+00:00')
+  self.assertEqual(self.view()['moved']['kind'],'snoozed');self.assertEqual(self.view()['stage'],'up_next')
+  with patch.object(tracker,'utc_now',return_value='2026-09-02T10:59:00Z'):self.assertEqual(self.view()['bucket'],'snoozed')
+  with patch.object(tracker,'utc_now',return_value='2026-09-02T11:00:00Z'):
+   self.assertEqual(self.view()['bucket'],'attention');self.assertEqual(self.view()['reasons'][-1]['kind'],'snooze')
+   self.assertEqual(self.view()['reasons'][-1]['url'],'https://github.com/example/repo/pull/1')
+  self.action('undo',revision=result['revision'],token=result['undo_token'])
+  self.assertNotIn('snoozed_until',self.record());self.assertEqual(self.view()['bucket'],'up_next')
+ def test_snooze_ends_early_on_new_activity_only(self):
+  self.fetch(A,T2,[self.event()])
+  self.assertTrue(self.view()['reasons'])
+  self.action('snooze',days=3)
+  # Updates that arrived before the snooze do not end it.
+  self.fetch(A,T3,[self.event()]);self.assertEqual(self.view()['bucket'],'snoozed')
+  self.fetch(A,T3,[self.event(),self.event(kind='mention',at=T3,id='comment:2')])
+  self.assertEqual(self.view()['bucket'],'attention')
+  self.assertNotIn('snooze',[r['kind'] for r in self.view()['reasons']])
+  self.action('snooze',days=1);self.assertEqual(self.view()['bucket'],'snoozed')
+  self.fetch(B,T3,[self.event(),self.event(kind='mention',at=T3,id='comment:2')])
+  self.assertEqual(self.view()['bucket'],'attention')
+  self.action('snooze',days=0)
+  self.assertNotIn('snoozed_until',self.record());self.assertEqual(self.view()['bucket'],'up_next')
+  self.assertEqual(self.view()['moved']['kind'],'unsnoozed')
+ def test_snoozed_review_continues_at_its_starting_commit(self):
+  self.action('start');self.action('snooze',days=7)
+  self.assertEqual(self.view()['bucket'],'snoozed');self.assertEqual(self.view()['stage'],'reviewing')
+  self.fetch(B,T3);self.assertEqual(self.view()['bucket'],'attention')
+  self.action('start')
+  self.assertEqual(self.view()['bucket'],'reviewing');self.assertEqual(self.record()['review_observation']['head_sha'],A)
+  self.assertNotIn('snoozed_until',self.record());self.assertNotIn('snooze_baseline',self.record())
+ def test_snooze_is_for_your_turn_and_cleared_by_moves(self):
+  self.action('start');self.action('wait')
+  with self.assertRaises(dashboard.DashboardError):self.action('snooze',days=1)
+  for action in ('start','stop','remove'):
+   if action=='remove':self.action('restore')
+   self.action('snooze',days=1) if self.record()['stage'] in q.SNOOZABLE else None
+   self.action(action)
+   self.assertNotIn('snoozed_until',self.record(),action)
+  self.action('restore')
+  with patch.object(tracker,'utc_now',return_value=T1):self.action('start');self.action('snooze',days=1)
+  # Submitting a review on GitHub hands the PR back and ends the snooze.
+  self.fetch(B,T3,latest={'commit_id':B,'submitted_at':T2,'state':'APPROVED'})
+  self.assertEqual(self.view()['bucket'],'waiting');self.assertNotIn('snoozed_until',self.record())
  def test_github_review_move_is_explained(self):
   with patch.object(tracker,'utc_now',return_value=T1):self.action('start')
   self.fetch(B,T3,latest={'commit_id':B,'submitted_at':T2,'state':'APPROVED'})

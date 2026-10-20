@@ -21,7 +21,7 @@ the dashboard does not post comments, approve or merge PRs.
 | Feature | What you can do |
 |---|---|
 | **PR inbox** | Browse review requests, watched repositories and your own PRs. Filter by author, repository, review status or draft state; save named filter presets; snooze or hide items. |
-| **My reviews** | Keep an ordered queue, save private notes and reminders, and see when new commits or replies bring a PR back to you. |
+| **My reviews** | Keep an ordered queue, save private notes and reminders, snooze PRs you'll get to later, and see when new commits or replies bring a PR back to you. |
 | **Review load** | Get optional Low, Medium, High or Unsure estimates of how much reviewing a PR will take, split into change scope, required context, complexity and risk, with reasons, filters and a daily call limit. |
 | **AI reviews** | Run Codex or Claude Code, follow live progress, add guidance, optionally include selected private notes or Ask AI conversations, ask questions, wrap up early or stop a run. Existing PR comments are read first, so findings already raised become replies to their threads. Continue a finished review's session in either agent. After small follow-up commits, update a review instead of redoing it: previous findings are re-checked and only the affected parts are redone. Keep the newest reports and run history. |
 | **Review reports** | One scrolling page: why the PR exists (sourced from the PR, issue or commits), what is different now, an at-a-glance strip with findings and judgment calls, background with a where-it-sits map for repositories you don't know, the change with a visual that fits it, the key code inline and the blast radius, followed by step-by-step findings with fix sketches, copyable draft comments, a short self-check and verification limits. |
@@ -59,9 +59,9 @@ review assistance; you decide which comments to send and whether to approve.
 
 ![Two fictional findings, one expanded with its walkthrough, fix sketch and copyable comment](docs/screenshots/review-findings-light.jpg)
 
-**My reviews:** see whose turn it is, what changed and where you stopped.
+**My reviews:** see whose turn it is, what changed, where you stopped and what you snoozed.
 
-![Personal review queue with update indicators and private notes](docs/screenshots/my-reviews-light.jpg)
+![Personal review queue with update indicators, private notes and snooze controls](docs/screenshots/my-reviews-light.jpg)
 
 **Live review:** follow progress, ask questions, add guidance or request an early wrap-up.
 
@@ -81,7 +81,7 @@ review assistance; you decide which comments to send and whether to approve.
 
 </details>
 
-All screenshots use synthetic data, captured September 24–October 17, 2026 from the actual
+All screenshots use synthetic data, captured September 24–October 20, 2026 from the actual
 UI. See [screenshot provenance and refresh instructions](docs/screenshots/README.md).
 
 ## Install and run
@@ -204,6 +204,7 @@ troubleshooting, see [GitHub and AI authentication](docs/authentication.md).
    session in a terminal; **Copy handoff prompt** hands it to either agent.
 6. Use **Hand back to author** in My reviews when you are waiting for a response.
    New commits, relevant replies or a due reminder can bring the PR back to you.
+   To set a PR aside for a few days without handing it back, use **Snooze**.
 
 Reports remain available during reruns, and outdated results are marked.
 Finishing an AI run does not submit a GitHub review or finish your personal review.

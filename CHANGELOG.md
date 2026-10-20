@@ -4,7 +4,15 @@ Notable changes to the PR review dashboard and skill, newest first. Each pull
 request gets its own section with the day it merged; changes that went to `main`
 without a pull request are grouped by day.
 
-## #21 · Explain why a PR exists before what it changes (unreleased)
+## #22 · Snooze in My reviews (unreleased)
+
+- **Snooze** (1 day, 3 days, 1 week) on PRs in Up next and In progress sets
+  them aside in a new **Snoozed** section. They come back to you when the
+  snooze ends, or sooner on new commits, replies, mentions or a review
+  re-request.
+- A snoozed review in progress continues from the commit it started at.
+
+## #21 · Explain why a PR exists before what it changes · 2026-10-17
 
 - Review reports are one scrolling page: a sourced "Why this PR exists" lead,
   the outcome, At a glance with findings and rare "Needs your judgment"
