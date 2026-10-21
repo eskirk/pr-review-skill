@@ -86,6 +86,30 @@ const {chromium}=require(process.env.PR_REVIEW_PLAYWRIGHT_MODULE||'playwright');
   assert.equal(asks.at(-1).thread_id,null);
   assert.deepEqual(asks.at(-1).contexts.map(c=>c.comment),['r1']);
   await page.locator('[data-save-message="1"]').waitFor();
+  // Embedded review findings can be attached to a focused Ask AI conversation and
+  // their prepared draft can be explicitly posted through the dashboard.
+  await page.locator('#review-tab').click();
+  const report=page.frameLocator('.review-frame');
+  await report.locator('button', {hasText:'Ask AI about this finding'}).waitFor();
+  const postRequests=[];
+  page.on('request',request=>{if(request.url().endsWith('/workspace-comment'))postRequests.push(request.postDataJSON());});
+  await report.locator('button', {hasText:'Post draft on my behalf'}).click();
+  await page.locator('#post-dialog').waitFor();
+  assert.equal(await page.locator('#post-dialog').isVisible(),true);
+  assert.match(await page.locator('#post-target').innerText(),/existing GitHub review thread/);
+  assert.match(await page.locator('#post-comment').inputValue(),/existing batching behavior/);
+  await page.locator('#post-submit').click();
+  await page.waitForFunction(()=>document.querySelector('#post-dialog')?.open===false);
+  assert.equal(postRequests.length,1);
+  assert.equal(postRequests[0].finding,'finding-1');
+  assert.match(postRequests[0].body,/existing batching behavior/);
+  const findingAsks=[];
+  page.on('request',request=>{if(request.url().endsWith('/workspace-chat'))findingAsks.push(request.postDataJSON());});
+  await report.locator('button', {hasText:'Ask AI about this finding'}).click();
+  await page.locator('.context-attachment').waitFor();
+  assert.match(await page.locator('#chat-context').innerText(),/AI review finding/);
+  assert.equal(findingAsks.at(-1).contexts[0].kind,'finding');
+  assert.equal(findingAsks.at(-1).contexts[0].finding,1);
   for(const width of [880,390]){
    await page.setViewportSize({width,height:950});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`overflow ${width}`);

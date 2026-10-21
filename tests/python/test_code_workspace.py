@@ -11,6 +11,7 @@ import time
 import unittest
 from unittest.mock import patch
 import workspace_github as github
+import code_workspace
 import workspace_store as store
 import workspace_chat as chat
 import workspace_comments as comments
@@ -263,6 +264,64 @@ chat.worker(sys.argv[1],sys.argv[2])
         return [page('reviewThreads',threads,True),page('reviewThreads',[left]),
                 page('comments',[note('i1','Later',at='2026-01-03T00:00:00Z')]),
                 page('reviews',[note('r1','',state='APPROVED'),note('r2','Needs tests',state='CHANGES_REQUESTED',at='2026-01-02T00:00:00Z')])]
+
+    def test_posting_a_finding_uses_the_pinned_head_and_invalidates_comments(self):
+        response = subprocess.CompletedProcess([], 0, stdout=json.dumps({'id': 123, 'html_url': 'https://github.com/example/repo/pull/1#discussion_r123'}).encode(), stderr=b'')
+        with patch.object(comments.subprocess, 'run', return_value=response) as run:
+            result = comments.post(URL, {'revision': REV, 'body': 'Please keep this guard.',
+                                         'target': {'mode': 'inline', 'commit_id': HEAD,
+                                                    'path': 'src/a.ts', 'line': 4, 'side': 'RIGHT'}})
+        self.assertTrue(result['posted'])
+        command = run.call_args.args[0]
+        self.assertIn('repos/example/repo/pulls/1/comments', command)
+        self.assertIn('commit_id=' + HEAD, command)
+        self.assertIn('line=4', command)
+        self.assertIn('side=RIGHT', command)
+        with self.assertRaisesRegex(ValueError, 'pinned pull request head'):
+            comments.post(URL, {'revision': REV, 'body': 'x',
+                                'target': {'mode': 'inline', 'commit_id': BASE,
+                                           'path': 'src/a.ts', 'line': 4, 'side': 'RIGHT'}})
+
+    def test_posting_a_finding_can_reply_to_a_review_comment(self):
+        response = subprocess.CompletedProcess([], 0, stdout=b'{"html_url":"https://github.com/example/repo/pull/1#discussion_r9"}', stderr=b'')
+        with patch.object(comments.subprocess, 'run', return_value=response) as run:
+            comments.post(URL, {'revision': REV, 'body': 'The latest commit still has this case.',
+                                'target': {'mode': 'reply', 'in_reply_to': 9}})
+        command = run.call_args.args[0]
+        self.assertIn('repos/example/repo/pulls/1/comments', command)
+        self.assertIn('body=The latest commit still has this case.', command)
+        self.assertIn('in_reply_to=9', command)
+
+    def test_review_finding_attachment_uses_saved_report_not_browser_title(self):
+        run_id = 'finding-run'
+        directory = tracker.tracker_root() / 'runs' / run_id
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / 'review.md').write_text('<details class="review-finding">\n<summary>P2 · Keep the guard</summary>\n\n<!-- review-comment:start -->\nDraft\n<!-- review-comment:end -->\n</details>')
+        with patch.object(code_workspace, 'review', return_value={'artifact': {'run_id': run_id, 'head_sha': HEAD}}):
+            [context] = chat.normalize_contexts(URL, self.comparison, [{
+                'kind': 'finding', 'finding': 1, 'report_head': HEAD,
+                'base': BASE, 'head': HEAD, 'label': 'forged title'}])
+        self.assertEqual(context['label'], 'Finding 1 · P2 · Keep the guard')
+        self.assertNotIn('forged title', context['snippet'])
+        self.assertIn('review.md', context['snippet'])
+
+    def test_finding_preview_rebuilds_an_inline_target_from_the_saved_report(self):
+        run_id = 'finding-target-run'
+        directory = tracker.tracker_root() / 'runs' / run_id
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / 'review.md').write_text(
+            '<details class="review-finding">\n<summary>P2 · Keep the guard</summary>\n\n'
+            '**P2 · Comment · Source-verified** · '
+            '[src/a.ts](https://github.com/example/repo/blob/' + HEAD + '/src/a.ts#L1-L2)\n\n'
+            '<!-- review-comment:start -->\nDraft\n<!-- review-comment:end -->\n'
+            '</details>')
+        with patch.object(code_workspace, 'review', return_value={
+                'artifact': {'run_id': run_id, 'head_sha': HEAD, 'version': 'v1'}}):
+            result = code_workspace.finding(URL, REV, 'v1', 'finding-1')
+        self.assertTrue(result['can_post'])
+        self.assertEqual(result['target']['mode'], 'inline')
+        self.assertEqual(result['target']['line'], 2)
+        self.assertEqual(result['target']['start_line'], 1)
 
     def test_comments_are_read_with_paginated_queries_only(self):
         seen=[]

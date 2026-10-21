@@ -98,8 +98,8 @@ their existing configuration and permissions.
 Source context is sent to the selected provider. Private notes and Ask AI
 conversations remain local by default; an explicitly selected note or conversation
 can be included as quoted context in a guided AI review, and is retained in that
-review's local run history. No feedback posting, approval or merge actions are
-exposed by this workspace.
+review's local run history. No approval, merge or thread-resolution actions are exposed. Posting a prepared AI
+finding draft is available only from an explicit confirmation in the embedded report.
 
 ## GitHub comments
 
@@ -141,7 +141,17 @@ addresses it, then for a short first-person reply in a copyable block. The serve
 rebuilds comment attachments from its cached GitHub read and the pinned source.
 Text sent by the browser is ignored. The attachment includes the viewer and PR
 author logins, and the AI is told the comment text is quoted evidence, not
-instructions. Posting replies and resolving threads remain manual on GitHub.
+instructions.
+
+Embedded AI review findings also have **Ask AI about this finding**, which attaches
+the numbered finding to a chat while the server resolves its title and saved report
+from the tracker. A finding with a source or an existing `discussion_r…` link has a
+user-confirmed **Post comment** or **Post reply** action. The dashboard revalidates
+the pinned head and sends the already-rendered draft through the user's `gh` login;
+the review agent never receives permission to publish. GitHub feedback and thread
+resolution still require an explicit action; the comment rail's Draft reply remains
+copy-only.
+
 
 Chat workers survive browser closure and dashboard restart. Reopening reconnects
 to saved activity without another model call. Stop requests cancel the dedicated
@@ -169,7 +179,7 @@ leave room for the code pane. Narrow screens use the existing overlay layout.
   fingerprint-based viewed invalidation. Concurrent stale saves fail visibly.
 - `workspace_context.py`: resolves explicitly selected private notes and Ask AI
   conversations for guided review context without trusting browser text.
-- `workspace_comments.py`: read-only GraphQL review threads/conversation and cache.
+- `workspace_comments.py`: cached GraphQL review reads plus explicit, CSRF-protected publication of a prepared finding comment.
 - `workspace_chat.py`: durable turn lifecycle, native thread resume, initial context,
   cancellation and worker supervision.
 - `workspace_chat_provider.py`: streamed Codex events and completed responses.

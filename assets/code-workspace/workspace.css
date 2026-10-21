@@ -789,6 +789,40 @@
   font-size: 12px;
   margin: 0 0 14px;
 }
+.post-dialog {
+  width: min(620px, calc(100vw - 32px));
+  padding: 22px;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.post-dialog::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+.post-dialog h2 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+.post-dialog label {
+  display: block;
+  margin: 14px 0 6px;
+}
+.post-dialog textarea {
+  width: 100%;
+  padding: 10px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  resize: vertical;
+  font: inherit;
+}
+.post-dialog .muted {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 8px 0 14px;
+}
 .review-context-picker {
   border: 1px solid var(--line);
   border-radius: 6px;

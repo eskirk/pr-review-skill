@@ -33,7 +33,7 @@ organization SSO authorization. An SSH key alone does not authenticate these API
 reads. GitHub CLI manages stored credentials; `GH_TOKEN` or `GITHUB_TOKEN` can
 also supply authentication to the server process. See [GitHub CLI authentication](https://cli.github.com/manual/gh_auth_login).
 
-Dashboard actions read GitHub; they do not post, approve, merge or resolve threads.
+Dashboard actions read GitHub by default. An explicit confirmation on an embedded AI review finding can post its prepared comment or reply through `gh`; the dashboard does not approve, merge or resolve threads. Review agents themselves remain read-only.
 This does not reduce the permissions of the underlying GitHub credential.
 My reviews binds its queue to the first synced GitHub account. Switching accounts
 produces an error; use a separate `PR_REVIEW_TRACKER_HOME` for another account.

@@ -1,5 +1,6 @@
-"""Read-only GitHub review threads and PR conversation through authenticated gh."""
+"""GitHub review threads and PR conversation through authenticated gh."""
 import json
+import re
 import subprocess
 import time
 import pr_dashboard as dashboard
@@ -116,3 +117,101 @@ def find(url, item_id):
         if item['id'] == item_id:
             return comments, item, 'conversation'
     raise ValueError('This comment is no longer available. Refresh comments and retry.')
+
+
+SHA = re.compile(r'^[0-9a-f]{40}$')
+MAX_POST_BODY = 20_000
+
+
+def _integer(value, label):
+    if type(value) is not int or value < 1:
+        raise ValueError(f'Invalid {label}.')
+    return value
+
+
+def _repository_path(value):
+    if (not isinstance(value, str) or not value or value.startswith('/') or
+            any(part in ('.', '..') for part in value.split('/')) or '\x00' in value):
+        raise ValueError('Choose a repository-relative source path.')
+    return value
+
+
+def _gh_post(args, kind):
+    try:
+        result = subprocess.run([dashboard.gh_executable(), 'api', *args],
+                                capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ValueError('GitHub is unavailable or timed out. Check gh authentication and retry.') from error
+    if result.returncode:
+        # Do not echo GitHub CLI output: it can contain repository text or credential-shaped data.
+        raise ValueError(f'GitHub could not post this {kind}. Check access and gh authentication.')
+    try:
+        value = json.loads(result.stdout) if result.stdout else {}
+    except (ValueError, UnicodeError):
+        value = {}
+    return value if isinstance(value, dict) else {}
+
+
+def post(url, request):
+    """Publish one user-confirmed prepared finding comment through gh.
+
+    The browser supplies only a target derived from the pinned workspace report;
+    the endpoint revalidates the PR and current head before invoking GitHub.
+    """
+    if not isinstance(request, dict):
+        raise ValueError('Expected a comment request.')
+    body = request.get('body')
+    if not isinstance(body, str) or not body.strip() or len(body) > MAX_POST_BODY or '\x00' in body:
+        raise ValueError('Comment must contain between 1 and 20,000 characters.')
+    target = request.get('target')
+    if not isinstance(target, dict):
+        raise ValueError('Choose a review thread or source location.')
+    canonical, repo, number = github.identity(url)
+    revision = request.get('revision')
+    comparison = github.cached(canonical, revision)
+    mode = target.get('mode')
+    if mode == 'reply':
+        comment_id = _integer(target.get('in_reply_to'), 'review comment')
+        # GitHub's reply endpoint accepts the parent comment ID as in_reply_to
+        # on the collection endpoint; the /comments/{id}/replies path is not
+        # available on all GitHub Enterprise versions.
+        value = _gh_post([f'repos/{repo}/pulls/{number}/comments',
+                          '--method', 'POST', '-f', f'body={body}',
+                          '-F', f'in_reply_to={comment_id}'], 'reply')
+    elif mode == 'inline':
+        commit_id = target.get('commit_id')
+        if not isinstance(commit_id, str) or not SHA.fullmatch(commit_id) or commit_id != comparison['head']:
+            raise ValueError('The review location is not from the pinned pull request head.')
+        source_path = _repository_path(target.get('path'))
+        file = next((item for item in comparison['files']
+                     if item.get('path') == source_path or item.get('previous') == source_path), None)
+        if file is None:
+            raise ValueError('The review location is not part of this pull request.')
+        # GitHub expects the new path for a renamed file, even for a left-side line.
+        source_path = file['path']
+        side = target.get('side')
+        if side not in ('LEFT', 'RIGHT'):
+            raise ValueError('Invalid review side.')
+        line = _integer(target.get('line'), 'review line')
+        args = [f'repos/{repo}/pulls/{number}/comments', '--method', 'POST',
+                '-f', f'body={body}', '-f', f'commit_id={commit_id}',
+                '-f', f'path={source_path}', '-F', f'line={line}', '-f', f'side={side}']
+        if target.get('start_line') is not None:
+            start_line = _integer(target.get('start_line'), 'review start line')
+            if start_line > line:
+                raise ValueError('Review start line must not follow the end line.')
+            args += ['-F', f'start_line={start_line}', '-f', f'start_side={side}']
+        value = _gh_post(args, 'comment')
+    elif mode == 'conversation':
+        value = _gh_post([f'repos/{repo}/issues/{number}/comments',
+                          '--method', 'POST', '-f', f'body={body}'], 'comment')
+    else:
+        raise ValueError('Choose a review thread or source location.')
+    # A successful post makes the old read cache misleading; the next rail load refreshes it.
+    try:
+        path(canonical).unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        pass
+    return {'posted': True, 'id': value.get('id'), 'url': value.get('html_url') or value.get('url') or ''}

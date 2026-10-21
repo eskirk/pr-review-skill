@@ -237,6 +237,14 @@ class HTTP(Isolated):
   code,headers,body=self.request('/artifact?path='+str(page))
   self.assertEqual(code,200);self.assertIn(b'/artifact?path=',body);self.assertNotIn(b'file://',body)
 
+ def test_standalone_review_offers_workspace_entry_point(self):
+  page=self.root/'review.html';page.write_text('<a href="https://github.com/example/repo/pull/1">Open pull request</a><section id="review-findings"><h2>Review findings</h2></section>')
+  code,headers,body=self.request('/artifact?path='+str(page))
+  self.assertEqual(code,200)
+  self.assertIn(b'Ask AI or post a finding in workspace',body)
+  self.assertIn(b'/workspace?url=https%3A%2F%2Fgithub.com%2Fexample%2Frepo%2Fpull%2F1&amp;tab=review',body)
+  self.assertIn("connect-src 'none'",headers['Content-Security-Policy'])
+
  def test_guided_context_is_forwarded_without_browser_text(self):
   context={'notes':['note-context-1'],'conversations':['11111111-1111-1111-1111-111111111111']}
   with patch.object(s.runtime,'start_launch',return_value={'run_id':'context-run'}) as launch:

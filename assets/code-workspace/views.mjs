@@ -95,16 +95,20 @@ export function renderFileRows(
 const contextName = (context) =>
   context.kind === "comment"
     ? "Comment" + (context.path ? " · " + basename(context.path) : "")
-    : basename(context.path);
-/** "code selections" when every attachment is code; comments make them generic. */
+    : context.kind === "finding"
+      ? "AI review finding"
+      : basename(context.path);
+/** "code selections" when every attachment is code; comments and findings are generic attachments. */
 export function attachmentCount(contexts) {
-  const code = contexts.every((c) => c.kind !== "comment"),
+  const code = contexts.every((c) => c.kind !== "comment" && c.kind !== "finding"),
     one = contexts.length === 1;
   return `${contexts.length} ${code ? (one ? "code selection" : "code selections") : one ? "attachment" : "attachments"}`;
 }
 export function contextHTML(context, index) {
-  const comment = context.kind === "comment";
-  return `<div class="context-attachment"><div class="context-heading"><button data-context-jump="${index}">${esc(contextName(context))} · ${esc(context.label)}</button><button class="context-remove" data-remove-context="${index}" aria-label="Remove ${comment ? "comment" : "code"} context: ${esc(contextName(context))} ${esc(context.label)}" title="Remove from future questions. Earlier messages keep their context.">×</button></div><p>${esc(context.path || "Pull request conversation")} · ${esc(context.side === "base" ? context.base : context.head)}</p><details><summary>${comment ? "GitHub comment" : `Selected code · ${context.ids.length} lines`}</summary><pre>${esc(context.snippet)}</pre></details></div>`;
+  const comment = context.kind === "comment",
+    finding = context.kind === "finding",
+    label = finding ? "Review finding" : comment ? "GitHub comment" : `Selected code · ${context.ids.length} lines`;
+  return `<div class="context-attachment"><div class="context-heading"><button data-context-jump="${index}">${esc(contextName(context))} · ${esc(context.label)}</button><button class="context-remove" data-remove-context="${index}" aria-label="Remove ${finding ? "finding" : comment ? "comment" : "code"} context: ${esc(contextName(context))} ${esc(context.label)}" title="Remove from future questions. Earlier messages keep their context.">×</button></div><p>${esc(finding ? "AI review report" : context.path || "Pull request conversation")} · ${esc(context.report_head || (context.side === "base" ? context.base : context.head))}</p><details><summary>${label}</summary><pre>${esc(context.snippet)}</pre></details></div>`;
 }
 export function messageContextHTML(message, index, thread) {
   const contexts = Array.isArray(message.contexts)

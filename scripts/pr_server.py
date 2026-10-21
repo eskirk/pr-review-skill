@@ -33,7 +33,7 @@ import workspace_context
 
 ASSETS = Path(__file__).resolve().parent.parent / 'assets'
 MUTATIONS = {'/ai-config','/triage-config','/triage-feedback','/triage-run','/triage-reestimate','/artifact-opened','/queue','/refresh-queue','/recover-reviews','/refresh-reporting','/refresh','/hide','/unhide','/snooze','/unsnooze','/set-config',
-             '/add-repo','/remove-repo','/add-host-repo','/remove-host-repo','/regenerate-review','/regenerate-explainer','/copy-prompt','/review-cancel','/review-message','/workspace-save','/workspace-chat','/workspace-chat-cancel'}
+             '/add-repo','/remove-repo','/add-host-repo','/remove-host-repo','/regenerate-review','/regenerate-explainer','/copy-prompt','/review-cancel','/review-message','/workspace-save','/workspace-chat','/workspace-chat-cancel','/workspace-comment'}
 
 
 class Server(ThreadingHTTPServer):
@@ -84,7 +84,7 @@ class Handler(BaseHTTPRequestHandler):
         suffix=path.suffix.lower()
         if suffix == '.md':
             body=dashboard.render_markdown_page(path.name,path,dashboard.markdown_to_html(path.read_text()))
-            if embedded: body=workspace_report.embed(body)
+            body = workspace_report.embed(body) if embedded else workspace_report.standalone(body)
             # Markdown is sanitized by our renderer; permit its fixed copy handler.
             self._send(200,body,'text/html; charset=utf-8',
                 ("sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; frame-ancestors FRAME; base-uri 'none'; form-action 'none'").replace("FRAME", "'self'" if embedded else "'none'"))
@@ -101,7 +101,7 @@ class Handler(BaseHTTPRequestHandler):
                     return match.group(0)
                 return 'href=' + match.group(1) + '/artifact?path=' + quote(target, safe='') + match.group(1)
             body = re.sub(r"href=([\"'])(file://[^\"']+)\1", local_link, path.read_text())
-            if embedded: body=workspace_report.embed(body)
+            body = workspace_report.embed(body) if embedded else workspace_report.standalone(body)
             self._send(200,body,'text/html; charset=utf-8',
                 ("sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: https:; font-src data:; connect-src 'none'; frame-ancestors FRAME; base-uri 'none'; form-action 'none'").replace('FRAME', "'self'" if embedded else "'none'"))
         elif suffix in ('.png','.jpg','.jpeg','.webp','.gif'):
@@ -176,6 +176,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(200, ai_settings.selected('chat'))
                 elif parsed.path == '/api/workspace-review':
                     self._send(200,workspace.review(url,query.get('head',[''])[0]))
+                elif parsed.path == '/api/workspace-finding':
+                    self._send(200,workspace.finding(url,rev,query.get('version',[''])[0],query.get('finding',[''])[0]))
                 elif parsed.path == '/workspace-report':
                     info=workspace.review(url,query.get('head',[''])[0])
                     artifact=info['artifact']
@@ -226,7 +228,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(404,'Action not found.'); return
         try:
             length=int(self.headers.get('Content-Length','0'))
-            if not 0 < length <= (650000 if path == '/workspace-save' else 100000 if path == '/workspace-chat' else 16384) or self.headers.get('Content-Type','').split(';')[0] != 'application/json':
+            if not 0 < length <= (650000 if path == '/workspace-save' else 100000 if path == '/workspace-chat' else 50000 if path == '/workspace-comment' else 16384) or self.headers.get('Content-Type','').split(';')[0] != 'application/json':
                 self._error(400,'Expected a small JSON request.'); return
             data=json.loads(self.rfile.read(length))
             if not isinstance(data,dict):
@@ -237,6 +239,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(202,workspace_chat.start(str(data.get('url','')),data)); return
             if path == '/workspace-chat-cancel':
                 self._send(200,workspace_chat.cancel(str(data.get('url','')),data.get('thread_id'))); return
+            if path == '/workspace-comment':
+                self._send(200,workspace.post_finding(str(data.get('url','')), data)); return
             if path == '/review-cancel':
                 self._send(200, reviews.cancel(str(data.get('run_id', '')))); return
             if path == '/review-message':

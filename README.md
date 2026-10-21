@@ -2,15 +2,16 @@
 
 A local dashboard and AI review skill for GitHub pull requests. Find what needs
 your attention, understand a change, inspect its code and discussion, and turn
-verified findings into review comments you can edit and post yourself.
+verified findings into review comments you can edit and post yourself, or explicitly publish from the embedded workspace.
 
 Use the dashboard with your GitHub CLI login. Add Codex or Claude Code for AI
 reviews, review load estimates and code chat. You can also run the review skill
 directly from an AI coding agent, without the dashboard.
 
 The app runs on your machine: a Python server with plain HTML, CSS and JavaScript.
-No frontend build or database service is required. GitHub operations are read-only;
-the dashboard does not post comments, approve or merge PRs.
+No frontend build or database service is required. GitHub operations are read-only by
+default; an explicit confirmation on an embedded finding can post its prepared
+comment or reply, while the dashboard still does not approve or merge PRs.
 
 [Features](#what-it-does) · [Screenshots](#screenshots) ·
 [Install and run](#install-and-run) · [First review](#run-your-first-review) ·
@@ -25,8 +26,8 @@ the dashboard does not post comments, approve or merge PRs.
 | **Review load** | Get optional Low, Medium, High or Unsure estimates of how much reviewing a PR will take, split into change scope, required context, complexity and risk, with reasons, filters and a daily call limit. |
 | **AI reviews** | Run Codex or Claude Code, follow live progress, add guidance, optionally include selected private notes or Ask AI conversations, ask questions, wrap up early or stop a run. Existing PR comments are read first, so findings already raised become replies to their threads. Continue a finished review's session in either agent. After small follow-up commits, update a review instead of redoing it: previous findings are re-checked and only the affected parts are redone. Keep the newest reports and run history. |
 | **Review reports** | One scrolling page: why the PR exists (sourced from the PR, issue or commits), what is different now, an at-a-glance strip with findings and judgment calls, background with a where-it-sits map for repositories you don't know, the change with a visual that fits it, the key code inline and the blast radius, followed by step-by-step findings with fix sketches, copyable draft comments, a short self-check and verification limits. |
-| **Code workspace** | Read unified or side-by-side diffs, expand context, open full files and track viewed files. Inspect inline GitHub threads and the PR conversation. |
-| **Code chat** | Ask about selected lines or comments, investigate the pinned revision and draft replies. Conversations persist with their original provider, model and revision. |
+| **Code workspace** | Read unified or side-by-side diffs, expand context, open full files and track viewed files. Inspect inline GitHub threads and the PR conversation; ask AI about a specific finding or explicitly post its prepared draft. |
+| **Code chat** | Ask about selected lines, comments or review findings, investigate the pinned revision and draft replies. Conversations persist with their original provider, model and revision. |
 | **Reporting** | Explore daily and weekly review/merge activity, completed-week comparisons and workday trends with time-off exclusions, plus estimated AI review cost for the last 30 days. |
 | **Settings** | Choose providers, models and reasoning independently for Triage, AI review and Chat. Configure watched repositories, repositories trusted to run blocked checks outside the sandbox, and light, dark or system appearance. |
 
@@ -199,7 +200,8 @@ troubleshooting, see [GitHub and AI authentication](docs/authentication.md).
    **Wrap up now** requests a report with unfinished checks recorded as gaps;
    **Stop review** cancels the worker and preserves saved activity.
 5. Read the completed report in **AI review**: assessment, explanation, findings
-   and verification evidence. Review and edit draft comments before posting on GitHub.
+   and verification evidence. Review and edit draft comments before posting on GitHub,
+   or use the embedded finding action to post a prepared comment after confirmation.
    **Continue in Claude Code/Codex** copies a command that opens the review's
    session in a terminal; **Copy handoff prompt** hands it to either agent.
 6. Use **Hand back to author** in My reviews when you are waiting for a response.

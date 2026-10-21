@@ -56,7 +56,9 @@ def main():
             f['fingerprint']=hashlib.sha256(json.dumps(f['rows']).encode()).hexdigest()
             f['patch']='\n'.join(r['text'] for r in f['rows'] if r['kind']!='context')
         tracker.atomic_write(store.directory(URL)/(comparison['revision']+'.json'),comparison)
-        report=Path(root)/'report.html';report.write_text('<!doctype html><style>'+ (Path(__file__).resolve().parents[2]/'assets/review.css').read_text() + '</style><main><div class="topbar"><button id="theme">Theme: System</button></div>' + '<h1>Fixture AI review</h1><p>A registered report rendered inside the workspace.</p><a href="https://github.com/example/telemetry-sdk/blob/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/src/transports/batch.ts#L40">Inspect guard</a><script>document.body.dataset.script="works"</script>' + '<details><summary>Validation details</summary>' + '<p>Verification evidence and review context.</p>'*40 + '</details></main>')
+        report=Path(root)/'report.html';report.write_text('<!doctype html><style>'+ (Path(__file__).resolve().parents[2]/'assets/review.css').read_text() + '</style><main><div class="topbar"><button id="theme">Theme: System</button></div>' + '<h1>Fixture AI review</h1><p>A registered report rendered inside the workspace.</p><a href="https://github.com/example/telemetry-sdk/blob/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/src/transports/batch.ts#L40">Inspect guard</a><details class="review-finding"><summary>P2 · Fixture finding</summary><p>The guard changes the batching behavior.</p><section class="review-comment"><p>Could we keep the existing batching behavior?</p></section></details><script>document.body.dataset.script="works"</script>' + '<details><summary>Validation details</summary>' + '<p>Verification evidence and review context.</p>'*40 + '</details></main>')
+        run_directory=Path(root)/'runs'/'fixture';run_directory.mkdir(parents=True)
+        (run_directory/'review.md').write_text('<details class="review-finding">\n<summary>P2 · Fixture finding</summary>\n\n**P2 · Comment · Source-verified** · [existing thread](https://github.com/example/telemetry-sdk/pull/248#discussion_r42)\n\n<!-- review-comment:start -->\nCould we keep the existing batching behavior?\n<!-- review-comment:end -->\n\n</details>')
         artifact={'path':str(report),'version':'fixture-v1','head_sha':comparison['head'],'status':'completed','name':'review-html','run_id':'fixture'}
         def load_manifest(url, progress=None):
             result=copy.deepcopy(comparison)
@@ -90,6 +92,7 @@ def main():
         stack.enter_context(patch.object(chat,'start',side_effect=lambda url,request:real_start(url,request,launcher=launch)))
         stack.enter_context(patch.object(dashboard,'discover_claude_options',return_value=([''],[''])))
         stack.enter_context(patch.object(comments,'fetch',side_effect=lambda url:fixture.review_comments(comparison['head'])))
+        stack.enter_context(patch.object(comments,'post',return_value={'posted':True,'url':'https://github.com/example/telemetry-sdk/pull/248#discussion_r43'}))
         # Fail closed: the fixture must never reach GitHub or a provider.
         stack.enter_context(patch.object(comments,'graphql',side_effect=AssertionError('Fixture network disabled')))
         stack.enter_context(patch.object(github,'api',side_effect=AssertionError('Fixture network disabled')))

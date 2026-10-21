@@ -59,6 +59,12 @@ export class WorkspaceAPI {
   stop(threadId) {
     return this.request("/workspace-chat-cancel", { thread_id: threadId });
   }
+  finding(revision, version, finding) {
+    return this.get("/api/workspace-finding", { revision, version, finding });
+  }
+  postComment(revision, version, finding, body) {
+    return this.request("/workspace-comment", { revision, version, finding, body });
+  }
 }
 export class SaveQueue {
   constructor(api, revision, version, onError) {

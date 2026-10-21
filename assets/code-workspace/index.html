@@ -222,7 +222,7 @@
           <div id="comment-conversation" class="comment-conversation"></div>
           <p class="chat-footnote">
             Read from GitHub with your gh login. Draft replies appear in chat for you to
-            copy; nothing is posted to GitHub.
+            copy. Embedded AI review findings have a separate, explicit publish action.
           </p>
         </div>
         <div id="notes-content" class="notes-content" hidden>
@@ -288,6 +288,19 @@
           ><button class="button" type="button" id="guidance-cancel">
             Cancel
           </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="post-dialog" class="post-dialog" aria-labelledby="post-heading">
+      <form id="post-form">
+        <h2 id="post-heading">Post review comment</h2>
+        <p id="post-target" class="muted"></p>
+        <label for="post-comment">Comment</label>
+        <textarea id="post-comment" rows="10" maxlength="20000"></textarea>
+        <p class="muted">This will post to GitHub using your gh login. Review the text and target before confirming.</p>
+        <div class="note-actions">
+          <button class="button primary" id="post-submit" type="submit">Post on my behalf</button>
+          <button class="button" type="button" id="post-cancel">Cancel</button>
         </div>
       </form>
     </dialog>
