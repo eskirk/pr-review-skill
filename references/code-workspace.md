@@ -99,7 +99,8 @@ Source context is sent to the selected provider. Private notes and Ask AI
 conversations remain local by default; an explicitly selected note or conversation
 can be included as quoted context in a guided AI review, and is retained in that
 review's local run history. No approval, merge or thread-resolution actions are exposed. Posting a prepared AI
-finding draft is available only from an explicit confirmation in the embedded report.
+finding draft is available only after an explicit confirmation in the trusted workspace;
+standalone artifact findings link there without receiving dashboard API access.
 
 ## GitHub comments
 
@@ -143,14 +144,16 @@ Text sent by the browser is ignored. The attachment includes the viewer and PR
 author logins, and the AI is told the comment text is quoted evidence, not
 instructions.
 
-Embedded AI review findings also have **Ask AI about this finding**, which attaches
-the numbered finding to a chat while the server resolves its title and saved report
-from the tracker. A finding with a source or an existing `discussion_r…` link has a
-user-confirmed **Post comment** or **Post reply** action. The dashboard revalidates
-the pinned head and sends the already-rendered draft through the user's `gh` login;
-the review agent never receives permission to publish. GitHub feedback and thread
-resolution still require an explicit action; the comment rail's Draft reply remains
-copy-only.
+Embedded and standalone AI review findings have **Ask AI about this finding**, which
+attaches the numbered finding to a chat while the server resolves its title and saved
+report from the tracker. A finding with a source or an existing `discussion_r…` link
+also has a user-confirmed **Post comment** or **Post reply** action. Standalone artifact
+links open the selected finding in the trusted workspace; the sandboxed report keeps
+`connect-src 'none'` and receives no dashboard token or API access. The dashboard
+revalidates the pinned head and sends the already-rendered draft through the user's
+`gh` login; the review agent never receives permission to publish. GitHub feedback
+and thread resolution still require an explicit action; the comment rail's Draft
+reply remains copy-only.
 
 
 Chat workers survive browser closure and dashboard restart. Reopening reconnects

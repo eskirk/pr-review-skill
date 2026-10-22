@@ -623,6 +623,20 @@ import { installChatResize } from "./chat-resize.mjs";
     const value = Number(match[1]);
     return Number.isSafeInteger(value) && value <= 1000 ? value : null;
   }
+  function queryFindingId() {
+    const value = params.get("finding");
+    if (/^finding-[1-9]\d*$/.test(value || "")) return value;
+    if (/^[1-9]\d*$/.test(value || "")) return `finding-${value}`;
+    return null;
+  }
+  async function activateFindingLink() {
+    const id = queryFindingId(),
+      action = params.get("finding_action");
+    if (!id || !["ask", "post"].includes(action)) return;
+    setTab("review");
+    if (action === "ask") await askFinding(id);
+    else await openPostFinding(id);
+  }
   async function findingPreview(id) {
     const artifact = data.review?.artifact;
     if (!artifact) throw new Error("There is no completed AI review to use.");
@@ -1445,6 +1459,7 @@ import { installChatResize } from "./chat-resize.mjs";
       renderFiles();
       if (currentThread()) renderChat();
       setTab(tab);
+      await activateFindingLink();
       loadComments();
       if (data.files.length) {
         const index = Math.max(

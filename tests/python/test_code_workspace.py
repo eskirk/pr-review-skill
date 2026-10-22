@@ -305,6 +305,23 @@ chat.worker(sys.argv[1],sys.argv[2])
         self.assertNotIn('forged title', context['snippet'])
         self.assertIn('review.md', context['snippet'])
 
+    def test_finding_preview_rebuilds_an_existing_reply_target_from_the_saved_report(self):
+        run_id = 'finding-reply-target-run'
+        directory = tracker.tracker_root() / 'runs' / run_id
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / 'review.md').write_text(
+            '<details class="review-finding">\n<summary>P2 · Keep the guard</summary>\n\n'
+            '**P2 · Comment · Source-verified** · '
+            '[existing thread](https://github.com/example/repo/pull/1#discussion_r9)\n\n'
+            '<!-- review-comment:start -->\nDraft\n<!-- review-comment:end -->\n'
+            '</details>')
+        with patch.object(code_workspace, 'review', return_value={
+                'artifact': {'run_id': run_id, 'head_sha': HEAD, 'version': 'v1'}}):
+            result = code_workspace.finding(URL, REV, 'v1', 'finding-1')
+        self.assertTrue(result['can_post'])
+        self.assertEqual(result['target']['mode'], 'reply')
+        self.assertEqual(result['target']['in_reply_to'], 9)
+
     def test_finding_preview_rebuilds_an_inline_target_from_the_saved_report(self):
         run_id = 'finding-target-run'
         directory = tracker.tracker_root() / 'runs' / run_id

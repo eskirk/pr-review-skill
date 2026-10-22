@@ -87,7 +87,7 @@ class Handler(BaseHTTPRequestHandler):
             body = workspace_report.embed(body) if embedded else workspace_report.standalone(body)
             # Markdown is sanitized by our renderer; permit its fixed copy handler.
             self._send(200,body,'text/html; charset=utf-8',
-                ("sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; frame-ancestors FRAME; base-uri 'none'; form-action 'none'").replace("FRAME", "'self'" if embedded else "'none'"))
+                ("sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; frame-ancestors FRAME; base-uri 'none'; form-action 'none'").replace("FRAME", "'self'" if embedded else "'none'"))
         elif suffix in ('.html','.htm'):
             # Opaque sandbox origin: explainer scripts can run, but cannot read
             # dashboard state/tokens or send authenticated dashboard actions.

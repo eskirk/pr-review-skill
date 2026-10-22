@@ -61,9 +61,10 @@ the tracking reference for the optional progress flags.
 - If authentication or repository access fails, report the blocker once and
   stop. Never request or expose credentials.
 - Never let a review agent or automatic tracker action publish or otherwise
-  mutate a PR. The local workspace may publish only the already-rendered finding
-  draft after a separate, explicit user confirmation; it must revalidate the
-  pinned revision and target first.
+  mutate a PR. The trusted local workspace may publish only the already-rendered
+  finding draft after a separate, explicit user confirmation; artifact links may
+  open that workspace but do not receive dashboard API access. It must revalidate
+  the pinned revision and target first.
 - Store no credentials, tokens, environment variables, PR source, or sensitive
   command output in either registry.
 
@@ -381,7 +382,7 @@ user instructions to use a particular skill still take precedence. Read
   into an explicitly non-blocking suggestion.
 
 Drafting is not publishing. Review agents never submit, post, or otherwise
-send a comment. Show drafts to the user first; the embedded workspace may publish
+send a comment. Show drafts to the user first; the trusted workspace may publish
 one only after separate explicit authorization and target/revision validation.
 
 ## Fact-check before rendering

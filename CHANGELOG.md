@@ -5,6 +5,10 @@ request gets its own section, and the pull request shows when it merged. Older
 sections also carry their merge day. Changes that went to `main` without a pull
 request are grouped by day.
 
+## #23 · Finding actions from saved reports
+
+- Saved report findings can open the trusted workspace directly for Ask AI or an explicitly confirmed draft post, including replies to existing threads.
+
 ## #22 · Snooze in My reviews · 2026-10-20
 
 - **Snooze** (1 day, 3 days, 1 week) on PRs in Up next and In progress sets

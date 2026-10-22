@@ -90,6 +90,8 @@ const {chromium}=require(process.env.PR_REVIEW_PLAYWRIGHT_MODULE||'playwright');
   // their prepared draft can be explicitly posted through the dashboard.
   await page.locator('#review-tab').click();
   const report=page.frameLocator('.review-frame');
+  await report.getByRole('heading',{name:'Fixture AI review'}).waitFor();
+  await report.locator('details.review-finding > summary').first().click();
   await report.locator('button', {hasText:'Ask AI about this finding'}).waitFor();
   const postRequests=[];
   page.on('request',request=>{if(request.url().endsWith('/workspace-comment'))postRequests.push(request.postDataJSON());});
@@ -110,6 +112,13 @@ const {chromium}=require(process.env.PR_REVIEW_PLAYWRIGHT_MODULE||'playwright');
   assert.match(await page.locator('#chat-context').innerText(),/AI review finding/);
   assert.equal(findingAsks.at(-1).contexts[0].kind,'finding');
   assert.equal(findingAsks.at(-1).contexts[0].finding,1);
+  // Standalone artifact links use the same trusted workspace actions with a deep link.
+  const deepLink=await context.newPage();
+  await deepLink.goto(new URL('/workspace?'+new URLSearchParams({url:'https://github.com/example/telemetry-sdk/pull/248',tab:'review',finding:'finding-1',finding_action:'post'}),page.url()).href);
+  await deepLink.locator('#post-dialog').waitFor();
+  assert.equal(await deepLink.locator('#post-dialog').isVisible(),true);
+  assert.match(await deepLink.locator('#post-target').innerText(),/existing GitHub review thread/);
+  await deepLink.close();
   for(const width of [880,390]){
    await page.setViewportSize({width,height:950});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`overflow ${width}`);

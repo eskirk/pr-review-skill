@@ -4,6 +4,16 @@ import re
 from urllib.parse import urlencode
 
 PR_LINK = re.compile(r'<a href="(https://github\.com/[^"<>]+/pull/[1-9][0-9]*)"[^>]*>Open pull request</a>')
+FINDING_SUMMARY = re.compile(
+    r'(<details\b[^>]*class="review-finding"[^>]*>\s*<summary>.*?</summary>)', re.S)
+DETAIL_TAG = re.compile(r'<details\b[^>]*>|</details>', re.I)
+
+STANDALONE_STYLE = '''<style id="workspace-report-standalone-style">
+.workspace-report-cta{margin:16px 0}
+.workspace-report-cta a,.workspace-finding-action{display:inline-block;padding:7px 12px;border:1px solid currentColor;border-radius:7px;font:600 13px/1.3 system-ui,sans-serif;text-decoration:none}
+.workspace-finding-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
+.workspace-finding-action{font-weight:500}
+</style>'''
 
 EMBED_STYLE = '''<style id="workspace-report-style">
 html,body{margin:0!important;min-height:0!important;height:auto!important;background:var(--bg)!important}
@@ -94,20 +104,68 @@ BRIDGE = r'''<script>
 </script>'''
 
 
+def _detail_end(body, start):
+    """Return the end offset of the details block that starts at ``start``."""
+    depth = 0
+    for tag in DETAIL_TAG.finditer(body, start):
+        if tag.group().startswith('</'):
+            depth -= 1
+            if depth == 0:
+                return tag.end()
+        else:
+            depth += 1
+    return len(body)
+
+
 def standalone(body):
-    """Add a navigation-only CTA without giving the opaque report API access."""
-    if 'workspace-report-cta' in body:
+    """Add finding-specific workspace links without giving the report API access."""
+    if 'workspace-report-cta' in body or 'workspace-finding-actions' in body:
         return body
     match = PR_LINK.search(body)
     if not match:
         return body
-    href = '/workspace?' + urlencode({'url': html.unescape(match.group(1)), 'tab': 'review'})
-    cta = ('<p class="workspace-report-cta"><a class="pr-link" href="' + html.escape(href, quote=True) +
+    report_url = html.unescape(match.group(1))
+    base_query = {'url': report_url, 'tab': 'review'}
+
+    def finding_links(index, has_comment):
+        def link(label, action):
+            query = {**base_query, 'finding': f'finding-{index}', 'finding_action': action}
+            href = html.escape('/workspace?' + urlencode(query), quote=True)
+            return (f'<a class="workspace-finding-action" href="{href}" target="_blank" '
+                    f'rel="noopener">{label}</a>')
+        post = link('Post draft in workspace', 'post') if has_comment else ''
+        return '<div class="workspace-finding-actions" aria-label="Finding actions">' + \
+            link('Ask AI about this finding', 'ask') + post + '</div>'
+
+    number = 0
+
+    def add_finding_links(found):
+        nonlocal number
+        number += 1
+        prefix = found.group(1)
+        opening_end = prefix.find('>')
+        opening = prefix[:opening_end]
+        opening = re.sub(r'\bid="[^"]*"', f'id="finding-{number}"', opening, count=1)
+        if ' id="finding-' not in opening:
+            opening += f' id="finding-{number}"'
+        prefix = opening + prefix[opening_end:]
+        end = _detail_end(body, found.start())
+        has_comment = 'class="review-comment"' in body[found.start():end]
+        actions = finding_links(number, has_comment)
+        return prefix.replace('</summary>', '</summary>' + actions, 1)
+
+    body = FINDING_SUMMARY.sub(add_finding_links, body)
+    href = html.escape('/workspace?' + urlencode(base_query), quote=True)
+    cta = ('<p class="workspace-report-cta"><a class="pr-link" href="' + href +
            '" target="_blank" rel="noopener">Ask AI or post a finding in workspace</a></p>')
     marker = '<section id="review-findings"'
     if marker in body:
-        return body.replace(marker, cta + marker, 1)
-    return body.replace('</header>', cta + '</header>', 1)
+        body = body.replace(marker, cta + marker, 1)
+    else:
+        body = body.replace('</header>', cta + '</header>', 1)
+    if '</head>' in body:
+        return body.replace('</head>', STANDALONE_STYLE + '</head>', 1)
+    return body + STANDALONE_STYLE
 
 
 def embed(body):

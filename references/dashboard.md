@@ -379,6 +379,9 @@ python3 ~/.agents/skills/pr-review/scripts/pr_dashboard.py hide 'https://github.
 Use `unhide` to restore a hidden PR.
 Adding/removing a watched repository updates settings immediately; refresh
 GitHub to update its PR membership.
+Generated report action links only navigate to the trusted workspace with a selected
+finding; they never post to GitHub directly, and the workspace still requires the
+explicit confirmation before publishing.
 Repositories under **Run blocked checks outside the sandbox** are stored as
 `host_execution_repos` (`owner/repo` or `owner/*`). `verification_sandbox.py
 --host` reads this list itself and refuses any other repository; see

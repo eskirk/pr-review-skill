@@ -89,7 +89,7 @@ def _report_target(markdown, comparison):
     for value in _urls(markdown):
         parsed = urlsplit(value)
         if parsed.path == pull_prefix:
-            match = re.fullmatch(r'#(?:discussion_r|pullrequestreviewcomment-)([1-9][0-9]*)', parsed.fragment)
+            match = re.fullmatch(r'(?:discussion_r|pullrequestreviewcomment-)([1-9][0-9]*)', parsed.fragment)
             if match:
                 return {'mode': 'reply', 'in_reply_to': int(match.group(1)),
                         'url': value, 'label': 'Reply to the existing GitHub review thread'}
