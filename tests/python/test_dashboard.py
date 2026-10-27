@@ -225,6 +225,12 @@ class HTTP(Isolated):
   code,headers,body=self.request('/');self.assertEqual(code,200);self.assertIn(self.server.csrf_token.encode(),body);self.assertEqual(headers['Cache-Control'],'private, no-cache')
   self.assertEqual(self.request('/api/state')[1]['Cache-Control'],'no-store')
   self.assertEqual(self.request('/assets/dashboard.js')[0],200)
+ def test_cancelled_response_does_not_raise_a_server_traceback(self):
+  class Closed:
+   def write(self,_):raise BrokenPipeError
+  handler=s.Handler.__new__(s.Handler);handler.wfile=Closed()
+  handler.send_response=lambda *_:None;handler.send_header=lambda *_:None;handler.end_headers=lambda:None
+  handler._send(200,b'asset','text/css')
  def test_html_is_sandboxed_and_symlink_escape_rejected(self):
   p=self.root/'example.html';p.write_text('<script>fetch("/api/state")</script>')
   code,headers,_=self.request('/artifact?path='+str(p));self.assertEqual(code,200);self.assertIn('sandbox allow-scripts',headers['Content-Security-Policy']);self.assertNotIn('allow-same-origin',headers['Content-Security-Policy'])

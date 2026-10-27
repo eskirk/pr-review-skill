@@ -53,15 +53,20 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps(body).encode()
         elif isinstance(body,str):
             body = body.encode()
-        self.send_response(code)
-        self.send_header('Content-Type',content_type)
-        self.send_header('Content-Length',str(len(body)))
-        self.send_header('Cache-Control',cache)
-        self.send_header('X-Content-Type-Options','nosniff')
-        self.send_header('Referrer-Policy','no-referrer')
-        self.send_header('Content-Security-Policy',csp or "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://github.com https://avatars.githubusercontent.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(code)
+            self.send_header('Content-Type',content_type)
+            self.send_header('Content-Length',str(len(body)))
+            self.send_header('Cache-Control',cache)
+            self.send_header('X-Content-Type-Options','nosniff')
+            self.send_header('Referrer-Policy','no-referrer')
+            self.send_header('Content-Security-Policy',csp or "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://github.com https://avatars.githubusercontent.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # Browsers can cancel an asset/navigation request while the response is in flight.
+            # The client is already gone, so there is no error response to send.
+            return
 
     def _error(self,code,message):
         self._send(code,{'error':message})
@@ -132,7 +137,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 time.sleep(1)
                 current = reviews.snapshot(run_id)
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
 
     def do_GET(self):
