@@ -98,7 +98,7 @@ const {chromium}=require(process.env.PR_REVIEW_PLAYWRIGHT_MODULE||'playwright');
   await report.locator('button', {hasText:'Post draft on my behalf'}).click();
   await page.locator('#post-dialog').waitFor();
   assert.equal(await page.locator('#post-dialog').isVisible(),true);
-  assert.match(await page.locator('#post-target').innerText(),/existing GitHub review thread/);
+  assert.match(await page.locator('#post-target').innerText(),/existing GitHub review thread.*discussion_r42/);
   assert.match(await page.locator('#post-comment').inputValue(),/existing batching behavior/);
   await page.locator('#post-submit').click();
   await page.waitForFunction(()=>document.querySelector('#post-dialog')?.open===false);
@@ -117,7 +117,7 @@ const {chromium}=require(process.env.PR_REVIEW_PLAYWRIGHT_MODULE||'playwright');
   await deepLink.goto(new URL('/workspace?'+new URLSearchParams({url:'https://github.com/example/telemetry-sdk/pull/248',tab:'review',finding:'finding-1',finding_action:'post'}),page.url()).href);
   await deepLink.locator('#post-dialog').waitFor();
   assert.equal(await deepLink.locator('#post-dialog').isVisible(),true);
-  assert.match(await deepLink.locator('#post-target').innerText(),/existing GitHub review thread/);
+  assert.match(await deepLink.locator('#post-target').innerText(),/existing GitHub review thread.*discussion_r42/);
   await deepLink.close();
   for(const width of [880,390]){
    await page.setViewportSize({width,height:950});

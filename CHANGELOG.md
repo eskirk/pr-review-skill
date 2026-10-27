@@ -9,6 +9,7 @@ request are grouped by day.
 
 - Saved report findings can open the trusted workspace directly for Ask AI or an explicitly confirmed draft post, including replies to existing threads.
 - Fixed: cancelled browser requests no longer produce a server traceback while loading dashboard assets.
+- Fixed: finding posts now use only the finding’s placement metadata, not unrelated links in its explanation.
 
 ## #22 · Snooze in My reviews · 2026-10-20
 

@@ -80,6 +80,31 @@ def _urls(text):
         yield value.rstrip('.,;:!?`)]')
 
 
+def _finding_metadata(markdown):
+    """Read the compact placement metadata, excluding explanatory prose and evidence."""
+    fence = None
+    summary_seen = False
+    for line in str(markdown or '').splitlines():
+        match = re.match(r'^\s*(`{3,}|~{3,})(.*)$', line)
+        if match:
+            token = match.group(1)
+            if fence is None:
+                fence = token
+            elif token[0] == fence[0] and len(token) >= len(fence) and not match.group(2).strip():
+                fence = None
+            continue
+        if fence is not None:
+            continue
+        stripped = line.strip()
+        if not summary_seen:
+            if re.fullmatch(r'<summary>.*</summary>', stripped):
+                summary_seen = True
+            continue
+        if stripped.startswith('**'):
+            return stripped
+    return ''
+
+
 def _report_target(markdown, comparison):
     repository = comparison['repository'].split('/')
     if len(repository) != 2:
@@ -92,7 +117,7 @@ def _report_target(markdown, comparison):
             match = re.fullmatch(r'(?:discussion_r|pullrequestreviewcomment-)([1-9][0-9]*)', parsed.fragment)
             if match:
                 return {'mode': 'reply', 'in_reply_to': int(match.group(1)),
-                        'url': value, 'label': 'Reply to the existing GitHub review thread'}
+                        'url': value, 'label': f'Reply to the existing GitHub review thread · {value}'}
     for value in _urls(markdown):
         parsed = urlsplit(value)
         parts = parsed.path.strip('/').split('/')
@@ -165,7 +190,7 @@ def finding(url, revision, version, finding_id):
     canonical, _, _ = github.identity(url)
     comparison = github.cached(canonical, revision)
     item = _finding_artifact(canonical, comparison['head'], version, finding_id)
-    target = _report_target(item['markdown'], comparison)
+    target = _report_target(_finding_metadata(item['markdown']), comparison)
     stale = item['head'] != comparison['head']
     return {'finding': str(finding_id), 'title': item['title'], 'body': item['body'],
             'target': target, 'stale': stale, 'can_post': bool(item['body']) and not stale,

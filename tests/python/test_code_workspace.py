@@ -292,6 +292,32 @@ chat.worker(sys.argv[1],sys.argv[2])
         self.assertIn('body=The latest commit still has this case.', command)
         self.assertIn('in_reply_to=9', command)
 
+    def test_finding_target_uses_placement_metadata_not_background_links(self):
+        run_id = 'finding-metadata-target-run'
+        directory = tracker.tracker_root() / 'runs' / run_id
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / 'review.md').write_text(
+            '<details class="review-finding">\n<summary>P2 · Placed finding</summary>\n\n'
+            '**P2 · Comment · Source-verified** · '
+            '[cache.py:13–14](https://github.com/example/repo/blob/' + HEAD + '/src/cache.py#L13-L14)\n\n'
+            'Is it real? An older report mentioned '
+            '[a resolved thread](https://github.com/example/repo/pull/1#discussion_r9).\n\n'
+            '<!-- review-comment:start -->\nDraft placement.\n<!-- review-comment:end -->\n'
+            '</details>\n\n'
+            '<details class="review-finding">\n<summary>P2 · General finding</summary>\n\n'
+            '**P2 · Comment · Source-verified** · General PR comment\n\n'
+            'The walkthrough mentions [caller.py:7](https://github.com/example/repo/blob/' + HEAD + '/caller.py#L7).\n\n'
+            '<!-- review-comment:start -->\nDraft conversation comment.\n<!-- review-comment:end -->\n'
+            '</details>')
+        with patch.object(code_workspace, 'review', return_value={
+                'artifact': {'run_id': run_id, 'head_sha': HEAD, 'version': 'v1'}}):
+            placed = code_workspace.finding(URL, REV, 'v1', 'finding-1')
+            general = code_workspace.finding(URL, REV, 'v1', 'finding-2')
+        self.assertEqual((placed['target']['mode'], placed['target']['path'], placed['target']['line']),
+                         ('inline', 'src/cache.py', 14))
+        self.assertNotIn('discussion_r9', placed['target']['label'])
+        self.assertEqual(general['target']['mode'], 'conversation')
+
     def test_review_finding_attachment_uses_saved_report_not_browser_title(self):
         run_id = 'finding-run'
         directory = tracker.tracker_root() / 'runs' / run_id
@@ -321,6 +347,7 @@ chat.worker(sys.argv[1],sys.argv[2])
         self.assertTrue(result['can_post'])
         self.assertEqual(result['target']['mode'], 'reply')
         self.assertEqual(result['target']['in_reply_to'], 9)
+        self.assertIn('#discussion_r9', result['target']['label'])
 
     def test_finding_preview_rebuilds_an_inline_target_from_the_saved_report(self):
         run_id = 'finding-target-run'
