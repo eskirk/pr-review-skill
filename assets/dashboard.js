@@ -8,7 +8,7 @@ const safeUrl = value => {try {const u=new URL(value);return u.protocol==='https
 const labels={requested:'Requested from you',watching:'Watching',mine:'Your PRs',snoozed:'Snoozed',hidden:'Hidden'};
 const descriptions={requested:'PRs assigned to you or requesting your review.',watching:'Open PRs from repositories you follow.',mine:'Open pull requests you created.',snoozed:'Temporarily out of your inbox. Open PRs return after their snooze, once checked on GitHub.',hidden:'Set aside for now. Restore a PR to bring it back to its view.'};
 const statusLabels={starting:'Starting',queued:'Starting',running:'Reviewing',completed:'Completed','completed-with-gaps':'Completed with gaps',blocked:'Needs input',failed:'Run failed',cancelled:'Cancelled',stopping:'Stopping','no-activity':'No recent activity'};
-const active = run => run && ['starting','queued','running','stopping','no-activity'].includes(run.status);
+const active = run => run && ['starting','queued','running','stopping'].includes(run.status);
 const attention = run => run && ['blocked','failed','no-activity'].includes(run.status);
 const defaults={view:'requested',search:'',reportRepositoriesOnly:[],reportRepositoriesExcluded:[],repositoriesOnly:[],repositoriesExcluded:[],authorsOnly:[],authorsExcluded:[],statusesOnly:[],statusesExcluded:[],drafts:'all',triageEffort:'all',sort:'updated'};
 let filters={...defaults};

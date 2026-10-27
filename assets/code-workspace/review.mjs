@@ -12,6 +12,7 @@ export function reviewHTML(info, comparison, esc) {
       "cancelled",
       "no-activity",
     ].includes(run.status);
+  const stalled = run?.status === "no-activity";
   const check = info?.update_check;
   // A finished report of an older commit can be updated unless the fixed rules require a full review.
   const updatable =
@@ -22,7 +23,7 @@ export function reviewHTML(info, comparison, esc) {
     !(check?.decided_by === "rules" && check.scope === "full");
   const actions = `<div class="review-meta">${updatable ? '<button class="button" id="generate-review-update" title="Re-check the previous findings and review only the new commits and the code they affect">Update AI review</button>' : ""}<button class="button" id="generate-review" ${running ? "disabled" : ""}>${running ? "AI review in progress" : artifact ? "Run full AI review" : "Generate AI review"}</button>${running ? "" : '<button class="button" id="generate-review-guided">Run with guidance…</button>'}${run?.transport === "in-app" ? `<a class="button" href="/?review=${encodeURIComponent(run.run_id)}">Review activity</a>` : ""}${artifact ? continueHTML(info.continuation, esc) : ""}</div>`;
   if (!artifact)
-    return `<div class="review-empty"><h2>${running ? "AI review in progress" : "Start with the code."}</h2><p>${running ? esc(run.message || "Preparing the review. You can keep exploring code.") : "No AI review yet. Explore the files, mark your progress, and ask questions about selected lines."}</p>${actions}</div>`;
+    return `<div class="review-empty"><h2>${running ? "AI review in progress" : stalled ? "No recent activity" : "Start with the code."}</h2><p>${running ? esc(run.message || "Preparing the review. You can keep exploring code.") : stalled ? "The previous review stopped reporting activity. Start a new review." : "No AI review yet. Explore the files, mark your progress, and ask questions about selected lines."}</p>${actions}</div>`;
   const query = new URLSearchParams({
     url: comparison.url,
     head: comparison.head,

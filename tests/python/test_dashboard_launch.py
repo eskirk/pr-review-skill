@@ -1,5 +1,6 @@
 import json
 import os
+from argparse import Namespace
 from pathlib import Path
 import subprocess
 import sys
@@ -104,6 +105,25 @@ class DashboardLaunch(unittest.TestCase):
                 self.assertIn(run_id,prompt)
                 self.assertNotIn('launch-exit',prompt)
         finally:fixture.tearDown()
+
+    def test_stale_legacy_run_is_recoverable_without_hiding_fresh_activity(self):
+        from test_dashboard import Isolated, URL
+        import dashboard_runtime as runtime
+        import pr_review_tracker as tracker
+        fixture = Isolated(); fixture.setUp()
+        try:
+            run_id = tracker.command_start(Namespace(pr_url=URL, tool='pi', title='Example',
+                working_directory='', session_reference='legacy-session', base_sha='', head_sha=''), emit=False)
+            tracker.command_set_task(Namespace(run_id=run_id, task='checkout', status='running', message='Working'))
+            run = tracker.load_run(tracker.run_dir(run_id), 6)
+            with patch.object(runtime, 'age_seconds', return_value=runtime.LEGACY_RUN_STALE_SECONDS + 1):
+                self.assertEqual(runtime.summarize_run(run)['status'], 'no-activity')
+                self.assertEqual(runtime.active_runs(URL, [run]), [])
+            with patch.object(runtime, 'age_seconds', return_value=0):
+                self.assertEqual(runtime.summarize_run(run)['status'], 'running')
+                self.assertEqual(len(runtime.active_runs(URL, [run])), 1)
+        finally:
+            fixture.tearDown()
 
     def test_selected_workspace_context_is_in_prompt_and_metadata(self):
         from test_dashboard import Isolated, URL

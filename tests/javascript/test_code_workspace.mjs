@@ -125,6 +125,8 @@ assert.ok(resumable.includes('Continue in &lt;Claude&gt;'));
 const expired = reviewHTML({...finished, continuation: {agent: 'Codex', unavailable: 'Gone <now>'}}, pinned, esc);
 assert.ok(expired.includes('disabled title="Gone &lt;now&gt;"') && !expired.includes('data-continue'));
 assert.ok(!reviewHTML({run, continuation: {agent: 'Codex', command: 'c', prompt: 'p'}}, pinned, esc).includes('data-continue'));
+const stalled = reviewHTML({run: {...run, status: 'no-activity'}}, pinned, esc);
+assert.ok(stalled.includes('No recent activity') && stalled.includes('Start a new review.') && stalled.includes('id="generate-review"'));
 // Reports of an older commit offer an update unless the fixed rules require a full review.
 const older = {run: {...run, status: 'completed'}, artifact: {name: 'review-html', version: '1', head_sha: 'c'.repeat(40), status: 'completed'}};
 assert.ok(!reviewHTML(finished, pinned, esc).includes('generate-review-update'));

@@ -19,6 +19,7 @@ from agent_options import CATALOG
 
 ARTIFACT_NAMES = ('review-html', 'explanation-html', 'review-markdown')
 TERMINAL = {'completed', 'completed-with-gaps', 'failed', 'blocked', 'cancelled'}
+LEGACY_RUN_STALE_SECONDS = 60 * 60
 
 
 def artifact_allowed(path):
@@ -125,6 +126,10 @@ def summarize_run(run, checked_sha=''):
     job = reviews.job_state(run['run_id'])
     if job:
         status = job['status']
+    elif status == 'running' and age_seconds(run.get('updated_at', '')) > LEGACY_RUN_STALE_SECONDS:
+        # Legacy sessions have no local worker to report liveness. Do not leave a
+        # dead terminal session blocking a new review indefinitely.
+        status = 'no-activity'
     return {'run_id': run['run_id'], 'status': status, 'tool': run.get('tool', ''),
         'created_at': run.get('created_at', ''), 'updated_at': run.get('updated_at', ''),
         'head_sha': run.get('head_sha', ''), 'session_reference': run.get('session_reference', ''),
@@ -211,8 +216,9 @@ def guidance_prompt(guidance):
 
 
 def active_runs(canonical, runs):
+    active = {'starting', 'queued', 'running', 'stopping'}
     return [r for r in runs if r['pr_url'] == canonical and
-            (summarize_run(r)['status'] not in TERMINAL or
+            (summarize_run(r)['status'] in active or
              (reviews.read_job(r['run_id']) and reviews.worker_alive(r['run_id'])))]
 
 
