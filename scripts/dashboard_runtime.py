@@ -38,6 +38,31 @@ def artifact_version(artifact):
         json.dumps(artifact, sort_keys=True).encode()).hexdigest()
 
 
+def registered_report(path=None, version=None, pr_url=None):
+    """Find the review report registration for a served path or a version ID."""
+    try:
+        path = Path(path).resolve(strict=True) if path else None
+    except (OSError, ValueError):
+        return None
+    runs, _ = tracker.load_all_runs(dashboard.STALE_RUN_HOURS)
+    for run in sorted(runs, key=lambda r: r.get('created_at', ''), reverse=True):
+        if pr_url and run.get('pr_url') != pr_url:
+            continue
+        for artifact in run.get('artifacts', []):
+            if artifact.get('name') not in ('review-html', 'review-markdown'):
+                continue
+            if version and artifact_version(artifact) != version:
+                continue
+            try:
+                if path and Path(artifact.get('path', '')).resolve() != path:
+                    continue
+            except (OSError, ValueError):
+                continue
+            return {'run_id': run['run_id'], 'name': artifact['name'], 'version': artifact_version(artifact),
+                    'head_sha': artifact.get('head_sha', run.get('head_sha', ''))}
+    return None
+
+
 def mark_artifact_opened(run_id, name, version):
     if name not in ARTIFACT_NAMES or not isinstance(version, str) or not version:
         raise dashboard.DashboardError('Unknown artifact version.')

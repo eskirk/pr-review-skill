@@ -112,12 +112,22 @@ const {chromium}=require(process.env.PR_REVIEW_PLAYWRIGHT_MODULE||'playwright');
   assert.match(await page.locator('#chat-context').innerText(),/AI review finding/);
   assert.equal(findingAsks.at(-1).contexts[0].kind,'finding');
   assert.equal(findingAsks.at(-1).contexts[0].finding,1);
+  assert.equal(findingAsks.at(-1).contexts[0].report_version,'fixture-v1');
   // Standalone artifact links use the same trusted workspace actions with a deep link.
   const deepLink=await context.newPage();
   await deepLink.goto(new URL('/workspace?'+new URLSearchParams({url:'https://github.com/example/telemetry-sdk/pull/248',tab:'review',finding:'finding-1',finding_action:'post'}),page.url()).href);
   await deepLink.locator('#post-dialog').waitFor();
   assert.equal(await deepLink.locator('#post-dialog').isVisible(),true);
   assert.match(await deepLink.locator('#post-target').innerText(),/existing GitHub review thread.*discussion_r42/);
+  // A link from another saved report must not act on this report's finding with the same number.
+  const deepAsks=[];
+  deepLink.on('request',request=>{if(request.url().endsWith('/workspace-chat'))deepAsks.push(request);});
+  for(const action of ['post','ask']){
+   await deepLink.goto(new URL('/workspace?'+new URLSearchParams({url:'https://github.com/example/telemetry-sdk/pull/248',tab:'review',finding:'finding-1',finding_action:action,version:'older-report'}),page.url()).href);
+   await deepLink.locator('#workspace-toast',{hasText:'another AI review report'}).waitFor();
+   assert.equal(await deepLink.locator('#post-dialog').isVisible(),false);
+  }
+  assert.equal(deepAsks.length,0);
   await deepLink.close();
   for(const width of [880,390]){
    await page.setViewportSize({width,height:950});

@@ -117,8 +117,12 @@ def _detail_end(body, start):
     return len(body)
 
 
-def standalone(body):
-    """Add finding-specific workspace links without giving the report API access."""
+def standalone(body, version=None):
+    """Add finding-specific workspace links without giving the report API access.
+
+    Finding numbers only identify a finding within one report, so the links
+    carry that report's version. Unregistered reports get no finding links.
+    """
     if 'workspace-report-cta' in body or 'workspace-finding-actions' in body:
         return body
     match = PR_LINK.search(body)
@@ -129,7 +133,7 @@ def standalone(body):
 
     def finding_links(index, has_comment):
         def link(label, action):
-            query = {**base_query, 'finding': f'finding-{index}', 'finding_action': action}
+            query = {**base_query, 'finding': f'finding-{index}', 'finding_action': action, 'version': version}
             href = html.escape('/workspace?' + urlencode(query), quote=True)
             return (f'<a class="workspace-finding-action" href="{href}" target="_blank" '
                     f'rel="noopener">{label}</a>')
@@ -143,6 +147,8 @@ def standalone(body):
         nonlocal number
         number += 1
         prefix = found.group(1)
+        if not version:
+            return prefix
         opening_end = prefix.find('>')
         opening = prefix[:opening_end]
         opening = re.sub(r'\bid="[^"]*"', f'id="finding-{number}"', opening, count=1)

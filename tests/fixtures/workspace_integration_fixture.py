@@ -17,6 +17,7 @@ import workspace_store as store
 import workspace_chat as chat
 import workspace_comments as comments
 import code_workspace as workspace
+import dashboard_runtime as runtime
 import pr_dashboard as dashboard
 import pr_review_tracker as tracker
 import pr_server
@@ -89,6 +90,7 @@ def main():
         stack.enter_context(patch.object(github,'manifest',side_effect=load_manifest))
         stack.enter_context(patch.object(github,'file_diff',side_effect=file_diff))
         stack.enter_context(patch.object(workspace,'review',return_value={'artifact':artifact,'run':None,'continuation':{'agent':'Claude Code','session_id':SESSION,'command':'cd /tmp/reviews && claude --resume '+SESSION+' --fork-session','prompt':'Pick up where an earlier Claude Code review left off.\nSession ID: '+SESSION}}))
+        stack.enter_context(patch.object(runtime,'registered_report',side_effect=lambda path=None,version=None,pr_url=None:artifact if version==artifact['version'] else None))
         stack.enter_context(patch.object(chat,'start',side_effect=lambda url,request:real_start(url,request,launcher=launch)))
         stack.enter_context(patch.object(dashboard,'discover_claude_options',return_value=([''],[''])))
         stack.enter_context(patch.object(comments,'fetch',side_effect=lambda url:fixture.review_comments(comparison['head'])))

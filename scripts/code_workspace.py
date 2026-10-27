@@ -209,7 +209,7 @@ def post_finding(url, request):
     preview = finding(canonical, revision, version, finding_id)
     if not preview['can_post']:
         raise ValueError(preview['notice'] or 'This finding has no copyable draft.')
-    body = request.get('body') or preview['body']
+    body = request.get('body', preview['body'])
     if not isinstance(body, str) or not body.strip():
         raise ValueError('Comment must contain text.')
     result = comments.post(canonical, {'revision': revision, 'body': body, 'target': preview['target']})

@@ -245,6 +245,14 @@ class HTTP(Isolated):
 
  def test_standalone_review_offers_workspace_entry_point(self):
   page=self.root/'review.html';page.write_text('<a href="https://github.com/example/repo/pull/1">Open pull request</a><section id="review-findings"><h2>Review findings</h2><details class="review-finding"><summary>P2 · Fixture finding</summary><section class="review-comment">Draft comment</section></details></section>')
+  # Finding numbers are per report, so unregistered reports get no finding links.
+  code,_,body=self.request('/artifact?path='+str(page))
+  self.assertEqual(code,200)
+  self.assertIn(b'Ask AI or post a finding in workspace',body)
+  self.assertNotIn(b'Ask AI about this finding',body)
+  run=self.create_run()
+  t.command_add_artifact(NS(run_id=run,name='review-html',kind='html',path=str(page),managed=True))
+  version=t.read_json(t.run_dir(run)/'artifacts'/'review-html.json')['version']
   code,headers,body=self.request('/artifact?path='+str(page))
   self.assertEqual(code,200)
   self.assertIn(b'Ask AI or post a finding in workspace',body)
@@ -252,8 +260,8 @@ class HTTP(Isolated):
   self.assertIn(b'Post draft in workspace',body)
   self.assertIn(b'id="finding-1"',body)
   self.assertIn(b'/workspace?url=https%3A%2F%2Fgithub.com%2Fexample%2Frepo%2Fpull%2F1&amp;tab=review',body)
-  self.assertIn(b'finding=finding-1&amp;finding_action=ask',body)
-  self.assertIn(b'finding=finding-1&amp;finding_action=post',body)
+  self.assertIn(b'finding=finding-1&amp;finding_action=ask&amp;version='+version.encode(),body)
+  self.assertIn(b'finding=finding-1&amp;finding_action=post&amp;version='+version.encode(),body)
   self.assertIn("connect-src 'none'",headers['Content-Security-Policy'])
   self.assertIn('allow-popups-to-escape-sandbox',headers['Content-Security-Policy'])
 

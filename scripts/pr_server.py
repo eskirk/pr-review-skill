@@ -79,6 +79,10 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get('Origin')
         return origin == 'http://' + self.headers.get('Host','')
 
+    def _report_version(self, path):
+        report = runtime.registered_report(path=path)
+        return report['version'] if report else None
+
     def _serve_artifact(self, query, embedded=False):
         raw = (parse_qs(query).get('path') or [''])[0]
         if not raw:
@@ -89,7 +93,7 @@ class Handler(BaseHTTPRequestHandler):
         suffix=path.suffix.lower()
         if suffix == '.md':
             body=dashboard.render_markdown_page(path.name,path,dashboard.markdown_to_html(path.read_text()))
-            body = workspace_report.embed(body) if embedded else workspace_report.standalone(body)
+            body = workspace_report.embed(body) if embedded else workspace_report.standalone(body, self._report_version(path))
             # Markdown is sanitized by our renderer; permit its fixed copy handler.
             self._send(200,body,'text/html; charset=utf-8',
                 ("sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; frame-ancestors FRAME; base-uri 'none'; form-action 'none'").replace("FRAME", "'self'" if embedded else "'none'"))
@@ -106,7 +110,7 @@ class Handler(BaseHTTPRequestHandler):
                     return match.group(0)
                 return 'href=' + match.group(1) + '/artifact?path=' + quote(target, safe='') + match.group(1)
             body = re.sub(r"href=([\"'])(file://[^\"']+)\1", local_link, path.read_text())
-            body = workspace_report.embed(body) if embedded else workspace_report.standalone(body)
+            body = workspace_report.embed(body) if embedded else workspace_report.standalone(body, self._report_version(path))
             self._send(200,body,'text/html; charset=utf-8',
                 ("sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: https:; font-src data:; connect-src 'none'; frame-ancestors FRAME; base-uri 'none'; form-action 'none'").replace('FRAME', "'self'" if embedded else "'none'"))
         elif suffix in ('.png','.jpg','.jpeg','.webp','.gif'):

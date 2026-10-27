@@ -148,7 +148,10 @@ Embedded and standalone AI review findings have **Ask AI about this finding**, w
 attaches the numbered finding to a chat while the server resolves its title and saved
 report from the tracker. A finding with a source or an existing `discussion_r…` link
 also has a user-confirmed **Post comment** or **Post reply** action. Standalone artifact
-links open the selected finding in the trusted workspace; the sandboxed report keeps
+links open the selected finding in the trusted workspace and carry the report's
+version; a link from another report, such as an older run in history, is refused
+instead of acting on the current report's finding with the same number. Reports
+that are not registered with the tracker get no finding links. The sandboxed report keeps
 `connect-src 'none'` and receives no dashboard token or API access. The dashboard
 revalidates the pinned head and sends the already-rendered draft through the user's
 `gh` login; the review agent never receives permission to publish. GitHub feedback
