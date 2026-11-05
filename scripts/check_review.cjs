@@ -143,13 +143,20 @@ function check(ok,message){if(!ok)result.errors.push(message);}
    for(let i=0;i<result.comments;i++)check(await comments.nth(i).locator('.comment-source').inputValue()===expected[i],'Copy payload differs from authored Markdown');
   }
   for(let i=0;i<result.comments;i++){
-   const comment=comments.nth(i),button=comment.locator('.copy-comment');
-   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copiedReviewComment=value;}}}));
-   await button.click();await page.waitForFunction(()=>document.querySelector('.copy-status')!==null);
-   check(await page.evaluate(()=>window.copiedReviewComment)===await comment.locator('.comment-source').inputValue(),'Copy loses Markdown or includes metadata');
+   const comment=comments.nth(i),button=comment.locator('.copy-comment'),handoffButton=comment.locator('.copy-handoff');
+   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copiedReviewText=value;}}}));
+   await button.click();
+   check(await page.evaluate(()=>window.copiedReviewText)===await comment.locator('.comment-source').inputValue(),'Copy loses Markdown or includes metadata');
+   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>{window.copiedReviewText=value;}}}));
+   await handoffButton.click();
+   const prompt=await comment.locator('.handoff-source').inputValue();
+   if(sourceInput?.review?.markdown?.includes('[scripts/render_review.py:1]'))check(prompt.includes('File and line: scripts/render_review.py:1'),'Handoff prompt omits the finding file and line');
+   check(await page.evaluate(()=>window.copiedReviewText)===prompt,'Copy handoff prompt differs from its plain-text source');
    await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new Error('denied');}}}));
-   await button.click();check(await comment.locator('.comment-source').isVisible(),'Missing manual-copy fallback');
+   await button.click();check(await comment.locator('.comment-source').isVisible(),'Missing comment manual-copy fallback');
    await comment.locator('.comment-source').evaluate(e=>{e.hidden=true;});
+   await handoffButton.click();check(await comment.locator('.handoff-source').isVisible(),'Missing handoff manual-copy fallback');
+   await comment.locator('.handoff-source').evaluate(e=>{e.hidden=true;});
    await comment.locator('.copy-status').evaluate(e=>{e.textContent='';});
   }
   const scenarios=page.locator('.scenario');result.scenarios=await scenarios.count();

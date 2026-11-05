@@ -229,11 +229,14 @@ No arbitrary minimum or maximum finding count applies.
 
 Put the comment body as ordinary Markdown between the exact standalone
 `<!-- review-comment:start -->` and `<!-- review-comment:end -->` lines.
-The report renderer adds a Copy comment button; only that body is copied, including
-intended Markdown links and code fences, plus the on-behalf footer from
-`comment_attribution` (see [Authoring](authoring.md)). Put placement, disposition, confidence,
-severity and internal reasoning outside the markers. Do not wrap the whole
-body in a blockquote; use blockquotes inside it only for intentional quotations.
+The report renderer adds **Copy comment** and **Copy handoff prompt** buttons.
+Copy comment copies only that body, including intended Markdown links and code
+fences, plus the on-behalf footer from `comment_attribution` (see
+[Authoring](authoring.md)). Copy handoff prompt adds the finding's file and line
+when available, then the draft as plain text; it leaves out the on-behalf footer.
+Put placement, disposition, confidence, severity and internal reasoning outside
+the markers. Do not wrap the whole body in a blockquote; use blockquotes inside
+it only for intentional quotations.
 
 Keep a blank line around fenced code, lists and paragraphs. Evidence may use
 the exact bare `<details>` form above. The outer finding also accepts the

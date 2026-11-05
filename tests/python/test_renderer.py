@@ -79,9 +79,26 @@ class RendererTests(unittest.TestCase):
         output=render(d)
         self.assertLess(output.index('id="code"'),output.index('id="review-findings"'))
         self.assertIn('class="copy-comment"',output)
+        self.assertIn('class="copy-handoff">Copy handoff prompt</button>',output)
+        self.assertIn('File and line: not specified (general PR feedback)',output)
         self.assertIn('a &lt; b',output)
         self.assertIn('id="verification"',output)
         self.assertEqual(output.count('<script>'),1)
+    def test_handoff_prompt_includes_finding_locations_but_not_comment_attribution(self):
+        d=copy.deepcopy(self.data)
+        d['review']['markdown']=(
+            '<details class="review-finding">\n<summary>P2 · Keep the guard</summary>\n\n'
+            f'**P2 · Comment · Source-verified** · [src/my file.ts:12](https://github.com/example/repo/blob/{self.head}/src/my%20file.ts#L12-L14) · '
+            f'[lib/other.ts:8](https://github.com/example/repo/blob/{self.head}/lib/other.ts#L8)\n\n'
+            '<!-- review-comment:start -->\nCould we keep the guard?\n<!-- review-comment:end -->\n\n</details>')
+        d['comment_attribution']={'tool':'Claude Code','person':'Robert'}
+        output=render(d)
+        self.assertIn('File and line: src/my file.ts:12-14, lib/other.ts:8',output)
+        self.assertIn('Feedback:\nCould we keep the guard?',output)
+        handoff=output.split('class="handoff-source"',1)[1].split('</textarea>',1)[0]
+        self.assertNotIn('Posted by Claude Code',handoff)
+        self.assertIn('Posted by Claude Code',output.split('class="comment-source"',1)[1].split('</textarea>',1)[0])
+
     def test_attribution_footer_ends_every_draft_and_its_copy(self):
         d=copy.deepcopy(self.data)
         d['review']['markdown']='<details class="review-finding">\n<summary>P2 · Retry is skipped</summary>\n\n<!-- review-comment:start -->\nCould we retry?\n<!-- review-comment:end -->\n\n</details>'

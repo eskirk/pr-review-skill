@@ -25,11 +25,12 @@ if(findings.length>1){
 }
 
 document.addEventListener('click', async event => {
- const button=event.target.closest('.copy-comment');
+ const button=event.target.closest('.copy-comment,.copy-handoff');
  if(!button)return;
- const section=button.closest('.review-comment'),source=section.querySelector('.comment-source'),status=section.querySelector('.copy-status');
- try{await navigator.clipboard.writeText(source.value);status.textContent='Copied';}
- catch{source.hidden=false;source.focus();source.select();status.textContent='Select and copy the Markdown below.';}
+ const handoff=button.classList.contains('copy-handoff');
+ const section=button.closest('.review-comment'),source=section.querySelector(handoff?'.handoff-source':'.comment-source'),status=section.querySelector('.copy-status');
+ try{await navigator.clipboard.writeText(source.value);status.textContent=handoff?'Handoff prompt copied.':'Comment copied.';}
+ catch{source.hidden=false;source.focus();source.select();status.textContent=handoff?'Select and copy the handoff prompt below.':'Select and copy the Markdown below.';}
 });
 
 for(const scenario of document.querySelectorAll('.scenario')){

@@ -116,7 +116,7 @@ def review_markdown(text, data):
         if not isinstance(value, dict) or value.get('type') not in VISUAL_TYPES:
             raise ValueError('Review visual must reference a defined diagram, cases, table, flow, sequence, scenario or stepper')
         return blocks([value], data)
-    return render_markdown(text, inline, esc, visual=visual, footer=comment_footer(data))
+    return render_markdown(text, inline, esc, visual=visual, footer=comment_footer(data), handoff_enabled=True)
 
 def git(repository, *args):
     return subprocess.check_output(['git', '-C', str(repository), *args], text=True)

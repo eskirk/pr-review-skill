@@ -5,6 +5,11 @@ request gets its own section, and the pull request shows when it merged. Older
 sections also carry their merge day. Changes that went to `main` without a pull
 request are grouped by day.
 
+## #33 · Copyable finding handoff prompts
+
+- Review findings can be handed to a local coding agent with the file, line and
+  feedback in one plain-text prompt.
+
 ## #26 · Safer finding actions
 
 - Fixed: reloading or restoring a tab opened from a finding link no longer asks the AI again or reopens the post dialog.

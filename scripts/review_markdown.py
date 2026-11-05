@@ -1,6 +1,7 @@
 """Dependency-free block rendering for local review artifacts; raw HTML is escaped."""
 
 import re
+from urllib.parse import unquote
 
 START = '<!-- review-comment:start -->'
 END = '<!-- review-comment:end -->'
@@ -8,6 +9,47 @@ FINDING = '<details class="review-finding">'
 DETAILS = ('<details>', FINDING)
 FENCE = re.compile(r'^\s*(`{3,}|~{3,})(.*)$')
 ITEM = re.compile(r'^(\s*)([-+*]|\d+[.)])\s+(.*)$')
+PLACEMENT = re.compile(r'https://github\.com/[\w.-]+/[\w.-]+/blob/[0-9a-f]{40}/([^#)\s]+)#L([1-9][0-9]*)(?:-L([1-9][0-9]*))?')
+
+
+def finding_locations(lines):
+    """Return repository paths and line ranges from a finding's metadata line."""
+    summary_seen = False
+    fence = None
+    for line in lines:
+        stripped = line.strip()
+        match = FENCE.match(line)
+        if match:
+            token = match[1]
+            if fence is None:
+                fence = token
+            elif token[0] == fence[0] and len(token) >= len(fence) and not match[2].strip():
+                fence = None
+            continue
+        if fence:
+            continue
+        if not summary_seen:
+            if re.fullmatch(r'<summary>.*</summary>', stripped):
+                summary_seen = True
+            continue
+        if stripped.startswith('**'):
+            locations = []
+            for match in PLACEMENT.finditer(stripped):
+                path = unquote(match[1])
+                start, end = int(match[2]), int(match[3] or match[2])
+                if (path and not path.startswith('/') and not any(part in ('.', '..') for part in path.split('/'))
+                        and not any(ord(char) < 32 for char in path) and start <= end):
+                    location = f'{path}:{start}' + (f'-{end}' if end != start else '')
+                    if location not in locations:
+                        locations.append(location)
+            return locations
+    return []
+
+
+def handoff_prompt(body, locations):
+    """Build a plain-text prompt without the GitHub-comment attribution footer."""
+    location = ', '.join(locations) if locations else 'not specified (general PR feedback)'
+    return f'Please address this review feedback.\n\nFile and line: {location}\n\nFeedback:\n{body}'
 
 
 def find_close(lines, start, end_marker):
@@ -58,13 +100,14 @@ def cells(line):
     return result
 
 
-def render(text, inline, escape, depth=0, visual=None, footer=''):
+def render(text, inline, escape, depth=0, visual=None, footer='', handoff_locations=None, handoff_enabled=False):
     if depth > 24:
         return '<pre>' + escape(text) + '</pre>'
     lines = text.replace('\r\n', '\n').split('\n')
     parts, i = [], 0
-    def sub(body, allow_visual=True):
-        return render('\n'.join(body), inline, escape, depth + 1, visual if allow_visual else None, footer)
+    def sub(body, allow_visual=True, locations=None):
+        context = handoff_locations if locations is None else locations
+        return render('\n'.join(body), inline, escape, depth + 1, visual if allow_visual else None, footer, context, handoff_enabled)
     def table_at(index):
         if index + 1 >= len(lines) or '|' not in lines[index]: return False
         cols, delimiters = cells(lines[index]), cells(lines[index + 1])
@@ -90,11 +133,17 @@ def render(text, inline, escape, depth=0, visual=None, footer=''):
             parts.append('<pre><code>' + escape('\n'.join(block)) + '</code></pre>')
         elif s == START and (end := find_close(lines, i + 1, END)) is not None:
             body = '\n'.join(lines[i + 1:end]).strip('\n')
+            actions = '<button type="button" class="copy-comment">Copy comment</button>'
+            handoff_source = ''
+            if handoff_enabled:
+                prompt = handoff_prompt(body, handoff_locations or [])
+                actions += ' <button type="button" class="copy-handoff">Copy handoff prompt</button>'
+                handoff_source = '<textarea class="handoff-source" hidden readonly aria-label="Handoff prompt">' + escape(prompt) + '</textarea>'
             if footer: body += '\n\n' + footer
-            parts.append('<section class="review-comment"><button type="button" class="copy-comment">Copy comment</button>'
-                         '<span class="copy-status" role="status"></span><div class="comment-body">'
+            parts.append('<section class="review-comment">' + actions
+                         + '<span class="copy-status" role="status"></span><div class="comment-body">'
                          + sub(body.split('\n'), allow_visual=False) + '</div><textarea class="comment-source" hidden readonly aria-label="Comment Markdown">'
-                         + escape(body) + '</textarea></section>')
+                         + escape(body) + '</textarea>' + handoff_source + '</section>')
             i = end + 1
         elif visual and (marker := re.fullmatch(r'<!-- review-visual:([a-z][a-z0-9-]*) -->', s)):
             parts.append(visual(marker[1])); i += 1
@@ -103,7 +152,8 @@ def render(text, inline, escape, depth=0, visual=None, footer=''):
             while start < end and not lines[start].strip(): start += 1
             summary = re.fullmatch(r'<summary>(.*?)</summary>', lines[start].strip()) if start < end else None
             if summary:
-                parts.append(s + '<summary>' + inline(summary[1]) + '</summary>' + sub(lines[start + 1:end]) + '</details>')
+                locations = finding_locations(lines[start:end]) if s == FINDING else None
+                parts.append(s + '<summary>' + inline(summary[1]) + '</summary>' + sub(lines[start + 1:end], locations=locations) + '</details>')
                 i = end + 1
             else:
                 parts.append('<p>' + escape(line) + '</p>'); i += 1
